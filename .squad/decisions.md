@@ -187,3 +187,45 @@ No Core files modified. Build: 0 errors / 0 warnings. Tests: 56/56. Launch-test:
 - **UIPI** (primary fix): This app supports "Restart as Administrator". When running elevated, Windows UIPI silently blocks drag-drop messages (`WM_DROPFILES` etc.) sent from a non-elevated process like Explorer. The result is zero cursor feedback and a silently rejected drop — exactly the symptom reported. `ChangeWindowMessageFilterEx` with `MSGFLT_ALLOW` opens those three message channels for this specific HWND, restoring Explorer→app drag-drop when elevated.
 - **AllowDrop on drop target** (belt-and-suspenders): WPF drag-drop events need `AllowDrop="True"` on the element the cursor is actually over, not only on a parent. The `DropZoneBorder` already had a non-null `Background` (hit-testable), so adding `AllowDrop="True"` directly to it ensures the drag routing works correctly regardless of bubbling subtleties.
 - The existing `DragOver`/`DragEnter`/`Drop` handlers were already correctly written: `Effects=Copy`, `Handled=true`, `FileDrop` read with `.zip` filter, routed to `InstallZipsAsync` — the same method the Browse button uses.
+
+---
+
+# Decision: Warning messages must name every skipped/colliding file
+
+**Date:** 2026-05-31T18:55:17-04:00
+**By:** Nux
+**Requested by:** Elliott Williams
+
+## What
+
+`SyncEngine.InstallAsync` now emits one `InstallResult.Warnings` entry **per file** for both
+unmatched and collision cases, instead of a single aggregated count string.
+
+**Before:**
+```
+1 file(s) had no match in the data directory and were skipped.
+Path collision: 2 zip files resolve to 'vehicles/car_x/livery.dds' — none installed. User resolution required.
+```
+
+**After:**
+```
+Skipped (no match in data): mod_pack/brand_new_skin.dds
+Path collision: 'vehicles/car_x/livery.dds' — 2 source(s): skin_a/livery.dds, skin_b/livery.dds — none installed.
+```
+
+## Why
+
+The old format gave a bare count with no filenames.  The user could not tell *which* file was
+skipped or *which* zip entries collided, making the warning non-actionable.  Elliott's explicit
+request: "can we at least show which files it is warning us about?"
+
+The `WarningsDialog` already renders each `Warnings` string as its own scrollable row (one `⚠`
+icon per item), so one-row-per-file is the natural fit — no UI changes required.
+
+## Scope
+
+- `src/EWSR_PMR_ModApp.Core/SyncEngine/SyncEngine.cs` only.
+- No install behaviour changed: unmatched still skipped, collisions still not installed.
+- 4 new tests added (`InstallWarningsTests.cs`).
+- New `StubZipService` test double added.
+

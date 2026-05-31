@@ -96,17 +96,17 @@ public sealed class SyncEngine : ISyncEngine
                 }
             }
 
-            // Surface collisions to the caller — none are auto-installed.
-            if (plan.Collisions.Count > 0)
+            // Surface collisions — none are auto-installed; list every source so the user knows what conflicted.
+            foreach (var collision in plan.Collisions)
             {
-                foreach (var collision in plan.Collisions)
-                    warnings.Add(
-                        $"Path collision: {collision.Entries.Count} zip files resolve to " +
-                        $"'{collision.RelativeTargetPath}' — none installed. User resolution required.");
+                var sources = string.Join(", ", collision.Entries.Select(e => e.ZipEntry.FullNameInZip));
+                warnings.Add(
+                    $"Path collision: '{collision.RelativeTargetPath}' — {collision.Entries.Count} source(s): {sources} — none installed.");
             }
 
-            if (plan.Unmatched.Count > 0)
-                warnings.Add($"{plan.Unmatched.Count} file(s) had no match in the data directory and were skipped.");
+            // One row per skipped file so the user knows exactly which files were not installed.
+            foreach (var entry in plan.Unmatched)
+                warnings.Add($"Skipped (no match in data): {entry.FullNameInZip}");
 
             if (allMapped.Count == 0)
                 return InstallResult.Failure("No files could be mapped to the game data directory.");

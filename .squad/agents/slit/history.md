@@ -106,3 +106,8 @@ All files live under `src/EWSR_PMR_ModApp.UI/`:
 - **`ChangeWindowMessageFilterEx` requires the HWND** — call it in `OnSourceInitialized` (HWND exists), NOT in the constructor (too early, HWND is null).
 - **`AllowDrop` on the exact drop-target element, not just a parent.** Set it on the visual border/panel the user drops onto.
 - **`Background` must be non-null on the drop element** — a null/transparent background element is not hit-testable.
+
+## 2026-05-31T18:55:17-04:00: WarningsDialog Receives Per-File Warnings
+
+Nux refactored SyncEngine to emit one warning entry per skipped/colliding file instead of aggregated counts. No UI changes needed — WarningsDialog already renders each warning string as its own row.
+

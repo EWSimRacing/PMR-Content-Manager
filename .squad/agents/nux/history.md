@@ -5,7 +5,28 @@
 - My domain: file sync engine, zip extraction/validation, game path detection, update-revert recovery, backups.
 - User: Elliott Williams.
 
-## Learnings
+### 2026-05-31: Warning-format — name every skipped/colliding file
+
+**Decision:** `SyncEngine.InstallAsync` now emits one warning row per unmatched file and one warning row per collision (both with zip-relative paths), instead of a single aggregated count.
+
+**Unmatched format:**
+```
+Skipped (no match in data): {entry.FullNameInZip}
+```
+
+**Collision format:**
+```
+Path collision: '{relativeTargetPath}' — {N} source(s): {comma-list of ZipEntry.FullNameInZip} — none installed.
+```
+
+**Key files touched:**
+- `src/EWSR_PMR_ModApp.Core/SyncEngine/SyncEngine.cs` — warning construction (~lines 99–109)
+- `tests/EWSR_PMR_ModApp.Core.Tests/SyncEngine/InstallWarningsTests.cs` — 4 new tests verifying the format
+- `tests/EWSR_PMR_ModApp.Core.Tests/TestDoubles/StubZipService.cs` — new test double for install-path tests
+
+**MappingResolver strategy note for tests:**
+Path-overlay triggers when zip top-level dirs match data subdirectories (via real `Directory.Exists` or data-file index prefix check). To reliably exercise `Unmatched` and `Collisions` buckets in tests, use flat zip entries (no `/` in `FullNameInZip`) — `topLevelDirs.Count == 0` forces filename-index unconditionally. For collision tests, use distinct unknown prefixes (`skin_a/`, `skin_b/`) that are absent from both disk and the data index.
+
 
 ### 2026-05-31: Stack Decision & Handoff (via Furiosa)
 - **Stack:** C# / .NET 10 + WPF. Solution: `EWSR_PMR_ModApp.slnx` at repo root.
