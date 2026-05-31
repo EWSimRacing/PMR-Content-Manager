@@ -1,13 +1,64 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
+﻿using System.Windows;
+using Microsoft.Extensions.DependencyInjection;
+using EWSR_PMR_ModApp.Core.Abstractions;
+using EWSR_PMR_ModApp.Core.Backup;
+using EWSR_PMR_ModApp.Core.GameDetection;
+using EWSR_PMR_ModApp.Core.Manifest;
+using EWSR_PMR_ModApp.Core.SyncEngine;
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
+using EWSR_PMR_ModApp.Core.ZipHandling;
+using EWSR_PMR_ModApp.UI.Infrastructure;
+using EWSR_PMR_ModApp.UI.ViewModels;
 
 namespace EWSR_PMR_ModApp.UI;
 
 /// <summary>
-/// Interaction logic for App.xaml
+/// Application entry point. Sets up the DI container and launches the main window.
 /// </summary>
 public partial class App : Application
 {
+    private IServiceProvider? _services;
+
+    private void OnStartup(object sender, StartupEventArgs e)
+    {
+        var services = new ServiceCollection();
+        ConfigureServices(services);
+        _services = services.BuildServiceProvider();
+
+        // Resolve MainViewModel; inject the SettingsViewModel reference.
+        var mainVm     = _services.GetRequiredService<MainViewModel>();
+        var settingsVm = _services.GetRequiredService<SettingsViewModel>();
+        mainVm.SettingsViewModel = settingsVm;
+
+        var mainWindow = new MainWindow(mainVm);
+        mainWindow.Show();
+
+        // Async init: locate game, check elevation, load manifest.
+        _ = mainVm.InitializeAsync();
+    }
+
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        // ── Core infrastructure ──────────────────────────────────────────────
+        services.AddSingleton<IFileSystem, RealFileSystem>();
+        services.AddSingleton(TimeProvider.System);
+
+        // ── Core services ────────────────────────────────────────────────────
+        services.AddSingleton<IGameLocator,     GameLocator>();
+        services.AddSingleton<IManifestStore,   ManifestStore>();
+        services.AddSingleton<IZipService,      ZipService>();
+        services.AddSingleton<IMappingResolver, MappingResolver>();
+        services.AddSingleton<IBackupService,   BackupService>();
+        services.AddSingleton<ISyncEngine,      SyncEngine>();
+
+        // ── UI layer ─────────────────────────────────────────────────────────
+        services.AddSingleton<UISettingsStore>();
+        services.AddSingleton<MainViewModel>();
+        // SettingsViewModel depends on MainViewModel — factory avoids circular ctor.
+        services.AddSingleton<SettingsViewModel>(sp => new SettingsViewModel(
+            sp.GetRequiredService<IGameLocator>(),
+            sp.GetRequiredService<UISettingsStore>(),
+            sp.GetRequiredService<MainViewModel>()));
+    }
 }
 

@@ -3,10 +3,363 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:EWSR_PMR_ModApp.UI"
+        xmlns:vm="clr-namespace:EWSR_PMR_ModApp.UI.ViewModels"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Project Motor Racing — Mod Manager"
+        Height="680" Width="1040"
+        MinHeight="480" MinWidth="700"
+        Background="{StaticResource BaseBrush}"
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragEnter="Window_DragEnter"
+        DragLeave="Window_DragLeave"
+        DragOver="Window_DragOver">
 
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="50"/>   <!-- Toolbar -->
+            <RowDefinition Height="*"/>    <!-- Main content -->
+            <RowDefinition Height="Auto"/> <!-- Elevation banner -->
+            <RowDefinition Height="32"/>   <!-- Status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+        <Border Grid.Row="0"
+                Background="{StaticResource MantleBrush}"
+                BorderBrush="{StaticResource Surface0Brush}"
+                BorderThickness="0,0,0,1">
+            <Grid Margin="16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="🎮  Project Motor Racing Mod Manager"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource AccentBrush}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Foreground="{StaticResource SubtextBrush}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               Visibility="{Binding DataRoot, Converter={StaticResource NonNullToVisConverter}}">
+                        <TextBlock.Text>
+                            <Binding Path="DataRoot" StringFormat="{}·  {0}"/>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button Content="Re-check &amp; Reapply"
+                            Command="{Binding ReapplyCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Margin="0,0,8,0"
+                            ToolTip="Check for game-update-reverted mods and reapply them"/>
+                    <Button Content="⚙  Settings"
+                            Command="{Binding ToggleSettingsCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── Main content (mod list left / drop zone or settings right) ── -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="310" MinWidth="200"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*" MinWidth="260"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Installed mods list -->
+            <Grid Grid.Column="0"
+                  Background="{StaticResource MantleBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Padding="14,8"
+                        BorderBrush="{StaticResource Surface0Brush}"
+                        BorderThickness="0,0,0,1">
+                    <TextBlock Text="INSTALLED MODS"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource SubtextBrush}"/>
+                </Border>
+
+                <ListBox Grid.Row="1"
+                         ItemsSource="{Binding Mods}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ModItemViewModel}">
+                            <Border Padding="14,10">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding ModName}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding ModName}"/>
+                                    <TextBlock FontSize="11"
+                                               Foreground="{StaticResource SubtextBrush}"
+                                               Margin="0,2,0,6">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0}  ·  {1} file(s)">
+                                                <Binding Path="InstallDate"/>
+                                                <Binding Path="FileCount"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <Button Content="Uninstall"
+                                            Style="{StaticResource DangerButton}"
+                                            Command="{Binding UninstallCommand}"
+                                            HorizontalAlignment="Left"
+                                            Padding="10,3"
+                                            FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Empty state -->
+                <Border Grid.Row="1"
+                        Visibility="{Binding Mods.Count,
+                            Converter={StaticResource ZeroToVisConverter}}">
+                    <TextBlock Text="No mods installed yet."
+                               Foreground="{StaticResource SubtextBrush}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Margin="0,60,0,0"
+                               FontSize="13"/>
+                </Border>
+            </Grid>
+
+            <!-- Grid splitter -->
+            <GridSplitter Grid.Column="1"
+                          Width="5"
+                          Background="{StaticResource Surface0Brush}"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"/>
+
+            <!-- Right panel: drop zone OR settings -->
+            <Grid Grid.Column="2">
+
+                <!-- Drop zone (shown when NOT in settings) -->
+                <Grid Visibility="{Binding IsSettingsVisible,
+                          Converter={StaticResource InverseBoolToVisConverter}}">
+                    <Border x:Name="DropZoneBorder"
+                            Margin="28"
+                            CornerRadius="14"
+                            BorderThickness="2">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background"   Value="{StaticResource MantleBrush}"/>
+                                <Setter Property="BorderBrush"  Value="{StaticResource Surface1Brush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                        <Setter Property="Background"  Value="#1A273E"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <TextBlock FontSize="52"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource SubtextBrush}"
+                                       Margin="0,0,0,12">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                        <Setter Property="Text" Value="⬇"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                                <Setter Property="Text"       Value="⬇"/>
+                                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <TextBlock FontSize="19"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,6">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                        <Setter Property="Text" Value="Drop a mod .zip here"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                                <Setter Property="Text"       Value="Release to install"/>
+                                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <TextBlock Text="or"
+                                       FontSize="12"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource SubtextBrush}"
+                                       Margin="0,0,0,12"/>
+
+                            <Button Content="Browse for .zip…"
+                                    Style="{StaticResource AccentButton}"
+                                    Command="{Binding BrowseCommand}"
+                                    HorizontalAlignment="Center"
+                                    Padding="20,8"/>
+
+                            <TextBlock Text="Multiple zips supported — drop them all at once."
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource SubtextBrush}"
+                                       Margin="0,16,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Settings panel (shown when IsSettingsVisible = true) -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Background="{StaticResource BaseBrush}"
+                              Visibility="{Binding IsSettingsVisible,
+                                  Converter={StaticResource BoolToVisConverter}}">
+                    <StackPanel Margin="28,20">
+
+                        <TextBlock Text="SETTINGS"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource SubtextBrush}"
+                                   Margin="0,0,0,12"/>
+
+                        <Separator/>
+
+                        <!-- Game path -->
+                        <TextBlock Text="Game Data Path"
+                                   FontWeight="SemiBold"
+                                   Margin="0,8,0,4"/>
+                        <TextBlock Text="Path to the Project Motor Racing 'data' folder. Leave blank to auto-detect via Steam or the default install location."
+                                   Foreground="{StaticResource SubtextBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding SettingsViewModel.ConfiguredPath,
+                                         UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,6,0"/>
+                            <Button Grid.Column="1"
+                                    Content="Browse…"
+                                    Command="{Binding SettingsViewModel.BrowsePathCommand}"
+                                    Padding="10,4"/>
+                        </Grid>
+                        <Button Content="Apply Path"
+                                Style="{StaticResource AccentButton}"
+                                Command="{Binding SettingsViewModel.ApplyPathCommand}"
+                                HorizontalAlignment="Left"
+                                Padding="16,6"
+                                Margin="0,0,0,0"/>
+
+                        <Separator Margin="0,16,0,16"/>
+
+                        <!-- Reapply -->
+                        <TextBlock Text="Mod Status"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+                        <TextBlock Text="After a game update, mods may be silently reverted. Use Re-check to detect and reapply them."
+                                   Foreground="{StaticResource SubtextBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+                        <Button Content="Re-check &amp; Reapply Reverted Mods"
+                                Command="{Binding ReapplyCommand}"
+                                IsEnabled="{Binding IsNotBusy}"
+                                HorizontalAlignment="Left"
+                                Padding="14,6"/>
+
+                        <Separator Margin="0,16,0,16"/>
+
+                        <TextBlock Text="About"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="EWSR PMR Mod App  ·  Drop a zip, it just works."
+                                   Foreground="{StaticResource SubtextBrush}"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+            </Grid>
+        </Grid>
+
+        <!-- ── Elevation banner ──────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                Background="#2A1A0A"
+                BorderBrush="{StaticResource WarningBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="16,8"
+                Visibility="{Binding NeedsElevation,
+                    Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="⚠ "
+                               Foreground="{StaticResource WarningBrush}"
+                               FontSize="14"/>
+                    <TextBlock Foreground="{StaticResource WarningBrush}"
+                               VerticalAlignment="Center"
+                               Text="Admin rights required to write to the game's Program Files folder.  Install and uninstall are blocked until elevated."/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Restart as Administrator"
+                        Command="{Binding RestartElevatedCommand}"
+                        Background="#3E2510"
+                        Foreground="{StaticResource WarningBrush}"
+                        BorderBrush="#6E3A18"
+                        Padding="12,5"/>
+            </Grid>
+        </Border>
+
+        <!-- ── Status bar ────────────────────────────────────────────────── -->
+        <Border Grid.Row="3"
+                Background="{StaticResource MantleBrush}"
+                BorderBrush="{StaticResource Surface0Brush}"
+                BorderThickness="0,1,0,0"
+                Padding="16,0">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="200"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusText}"
+                           Foreground="{StaticResource SubtextBrush}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           FontSize="12"/>
+                <ProgressBar Grid.Column="1"
+                             Value="{Binding ProgressValue}"
+                             Maximum="100"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsBusy,
+                                 Converter={StaticResource BoolToVisConverter}}"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

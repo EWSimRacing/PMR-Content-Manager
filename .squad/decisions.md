@@ -128,3 +128,32 @@ Single canonical test project: `tests/EWSR_PMR_ModApp.Core.Tests` (the conventio
 
 **Why:**
 Consolidation into the solution eliminates the accidental omission where `dotnet test` was only running Nux's 6 smoke tests and ignoring Wez's full suite. Single source of truth simplifies CI/CD and team onboarding.
+
+---
+
+### 2026-05-31T18:09:19-04:00: WPF UI Architecture — Full Shell Implementation
+
+**By:** Slit
+
+**What:**
+The WPF UI shell for `src/EWSR_PMR_ModApp.UI` is now fully implemented. Key decisions:
+
+1. **MVVM pattern** — ViewModels (`MainViewModel`, `SettingsViewModel`, `ModItemViewModel`) hold all logic; code-behind (`MainWindow.xaml.cs`) is limited to drag-and-drop event bridging.
+
+2. **DI container** — `Microsoft.Extensions.DependencyInjection` (v9.0.5) registered in `App.xaml.cs`. All Core concrete types registered as singletons against their interfaces. `TimeProvider.System` registered for `SyncEngine`. A factory lambda breaks the `SettingsViewModel → MainViewModel` circular dependency.
+
+3. **Elevation approach** — `app.manifest` uses `asInvoker` (app starts without admin). If `IGameLocator.CanWriteDataRoot` returns false, a persistent orange banner is shown with a "Restart as Administrator" button that relaunches the process with `runas` verb. UAC cancellation (Win32 1223) is handled silently.
+
+4. **Ambiguous mapping dialog** — `ISyncEngine.InstallAsync`'s `confirmAmbiguous` callback is implemented as `MainViewModel.ResolveAmbiguousMappingsAsync`, which marshals via `Dispatcher.InvokeAsync` to show `AmbiguousMappingDialog` on the UI thread.
+
+5. **Collision/warning surfacing** — `InstallResult.Warnings` are shown in `WarningsDialog` after each install if non-empty, prominently noting collisions were NOT installed.
+
+6. **Settings persistence** — user-configured game path is written to `%APPDATA%\EWSR_PMR_ModApp\ui-settings.json` by `UISettingsStore` (UI-layer only; does not touch Core's `AppPaths`).
+
+7. **Color theme** — Catppuccin Mocha palette defined in `App.xaml` Application.Resources, applied via `StaticResource` brushes throughout.
+
+**Why:**
+- MVVM keeps logic testable and code-behind thin per the quality bar.
+- `asInvoker` + relaunch gives the best user experience: users can browse mods without admin, and are only prompted to elevate when they actually attempt a write operation.
+- DI-first approach means Core services can be swapped for test doubles without changing ViewModel code.
+- All Core interfaces matched their constructors exactly — no Core API gaps encountered.
