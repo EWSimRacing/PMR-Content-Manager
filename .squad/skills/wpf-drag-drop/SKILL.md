@@ -64,6 +64,54 @@ private void DropZone_Drop(object sender, DragEventArgs e)
 
 ---
 
+## ⚠️ Handlers-Declared-But-Not-Wired — Silent Drop Failure (EWSR_PMR_ModApp, 2026-05-31)
+
+**This is the second most common WPF drag-drop trap and produces zero error output.**
+
+### What happens
+
+You add `AllowDrop="True"` to your drop-target element (e.g. `DropZoneBorder`) and the handler methods exist in code-behind — but the XAML wires the handlers (`DragOver=`, `Drop=`, etc.) only to the **Window**, not to the element itself:
+
+```xml
+<!-- BROKEN: handlers only on Window, not on the AllowDrop element -->
+<Window AllowDrop="True" DragOver="Handler" Drop="Handler">
+    <Border AllowDrop="True">  <!-- ← no DragOver/Drop here! -->
+        ...
+    </Border>
+</Window>
+```
+
+Result:
+- `DragOver` is never confirmed with `e.Effects = Copy` for the OLE layer
+- ⊘ cursor appears the entire time
+- `Drop` never fires
+- No errors, no exceptions — complete silence
+
+### Why
+
+WPF's OLE drag-drop system targets the **innermost `AllowDrop="True"` element** in the hit-test path — here, the `Border`. WPF fires `DragOver` routed to that element. Since no handler is attached to the Border, nothing sets `e.Effects = DragDropEffects.Copy`. While the event may theoretically bubble to the Window's handler, the OLE layer makes its ⊘/✓ decision based on the innermost AllowDrop target's response — and sees nothing. Drop is suppressed.
+
+### The Fix
+
+Wire ALL four drag event handlers to the **same element** that has `AllowDrop="True"`:
+
+```xml
+<!-- CORRECT: handlers on the AllowDrop element itself -->
+<Window AllowDrop="True" DragOver="Handler" Drop="Handler" DragEnter="Handler" DragLeave="Handler">
+    <Border AllowDrop="True"
+            DragEnter="Handler"
+            DragOver="Handler"
+            DragLeave="Handler"
+            Drop="Handler">
+        ...
+    </Border>
+</Window>
+```
+
+Keep the Window-level handlers too — they catch drops on margin/background areas outside the border. The same handler methods work for both.
+
+---
+
 ## ⚠️ Elevated App + UIPI = Silent Drag-Drop Failure
 
 **This is the most insidious WPF drag-drop bug and the hardest to find without knowing what to look for.**
@@ -175,6 +223,7 @@ private static bool IsZipDrop(DragEventArgs e) =>
 ## Quick Checklist
 
 - [ ] `AllowDrop="True"` on the **specific** drop target element (not just Window)
+- [ ] Drag event handlers (`DragOver`, `DragEnter`, `DragLeave`, `Drop`) wired **to the same element that has `AllowDrop`** — NOT only to a distant ancestor like Window
 - [ ] Drop target has a **non-null Background** (hit-testable)
 - [ ] `DragOver` sets `e.Effects = Copy` and `e.Handled = true`
 - [ ] `DragEnter` sets `e.Effects = Copy` and `e.Handled = true`

@@ -28,3 +28,12 @@
 - **UI surface (Slit owns):** Drag-and-drop zone, mod list, settings, status/log panel
 - **Key files:** `docs/ARCHITECTURE.md` has full module breakdown and risk mitigations
 - **Build:** `dotnet build` from repo root; run with `dotnet run --project src/EWSR_PMR_ModApp.UI`
+
+### 2026-05-31: Zip Skip Policy Design
+- **Problem:** Elliott needs clarity on what files get skipped during mod install, why, and how to package zips correctly.
+- **Skip categories defined:** 9 categories covering all possible file fates — Install, DisplayOnly, NoPathMatch, MetaFile, HashMatch, UserExcluded, AmbiguousPending, Collision, UnsafeFile.
+- **Extension policy:** Game data formats (`.xml`, `.hadron`, `.tweakers`, `.i3d`, `.dds`) always install if path maps. Documentation (`.md`, `.txt`, `.pdf`) always display-only. Executables always blocked. Images conditional on location.
+- **modinfo.json v1 spec:** Full schema with `schemaVersion`, `name`, `version` required; `files`, `displayFiles`, `skipFiles` for explicit control; `dependencies` for future mod chaining.
+- **Key insight:** Display-only category lets READMEs and previews exist in the mod manager UI without ever touching the game directory — solves Elliott's "README_*.md at zip root" use case cleanly.
+- **Deliverables:** Updated `docs/ARCHITECTURE.md` (skip logic + modinfo spec), new `docs/MOD_PACKAGING_GUIDE.md` (practical author reference).
+- **Next:** Nux implements `SkipCategory` enum and filtering in ZipService; Slit updates install result UI to show skip breakdown.

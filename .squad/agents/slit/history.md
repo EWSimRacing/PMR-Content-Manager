@@ -107,6 +107,22 @@ All files live under `src/EWSR_PMR_ModApp.UI/`:
 - **`AllowDrop` on the exact drop-target element, not just a parent.** Set it on the visual border/panel the user drops onto.
 - **`Background` must be non-null on the drop element** — a null/transparent background element is not hit-testable.
 
+### 2026-05-31T19:19:13-04:00: Drag-Drop Still Broken — Real Root Cause Found (handlers not wired to drop target)
+
+**Root cause:** `DropZoneBorder` had `AllowDrop="True"` (added in ba4c336) but had **no drag event handlers attached to it in XAML**. The handlers (`Window_DragEnter`, `Window_DragOver`, `Window_DragLeave`, `Window_Drop`) were only wired to the `Window` element.
+
+**Why this breaks:** WPF's OLE drag-drop system targets the **innermost AllowDrop element** found via hit-test — in this case `DropZoneBorder`. During `DragOver`, no handler fires on DropZoneBorder to set `e.Effects = DragDropEffects.Copy`. WPF never reports a valid effect back to the OLE layer, so the ⊘ cursor is shown and `Drop` never fires — even though the Window-level handlers would theoretically receive the bubbled events.
+
+Adding `AllowDrop` to DropZoneBorder (ba4c336) without also adding the handlers actually made things WORSE: it made DropZoneBorder the "responsible" OLE target but left it with no handler to confirm the drop.
+
+**Fix:** Added `DragEnter="Window_DragEnter"`, `DragOver="Window_DragOver"`, `DragLeave="Window_DragLeave"`, `Drop="Window_Drop"` directly to `DropZoneBorder` in XAML. Same handler methods, same logic — no code-behind changes. Window-level handlers kept as fallback for drops on margin/background areas.
+
+**Key lesson:** Handlers must be wired to the SAME element that has `AllowDrop="True"` (or at least to the innermost AllowDrop element in the visual path). Wiring them to a distant ancestor like Window and relying on bubbling is unreliable because WPF's OLE layer interprets effects from the innermost AllowDrop target's handling, not from bubbled ancestors.
+
+**UIPI fix (ba4c336) is still correct:** The `ChangeWindowMessageFilterEx` call in `OnSourceInitialized` is still needed for the elevated/Restart-as-Administrator scenario. Do not remove it.
+
+---
+
 ## 2026-05-31T18:55:17-04:00: WarningsDialog Receives Per-File Warnings
 
 Nux refactored SyncEngine to emit one warning entry per skipped/colliding file instead of aggregated counts. No UI changes needed — WarningsDialog already renders each warning string as its own row.
