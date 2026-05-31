@@ -157,3 +157,13 @@ The WPF UI shell for `src/EWSR_PMR_ModApp.UI` is now fully implemented. Key deci
 - `asInvoker` + relaunch gives the best user experience: users can browse mods without admin, and are only prompted to elevate when they actually attempt a write operation.
 - DI-first approach means Core services can be swapped for test doubles without changing ViewModel code.
 - All Core interfaces matched their constructors exactly — no Core API gaps encountered.
+
+---
+
+### 2026-05-31: Fix ProgressBar TwoWay Binding Crash
+
+**By:** Slit
+
+**What:** Added `Mode=OneWay` to `ProgressBar.Value` binding in `MainWindow.xaml` (line 357). Changed `Value="{Binding ProgressValue}"` → `Value="{Binding ProgressValue, Mode=OneWay}"`.
+
+**Why:** `RangeBase.Value` (the base of `ProgressBar`) binds TwoWay by default. `MainViewModel.ProgressValue` has a `private set`, which WPF cannot write to from outside the class. At startup WPF attempted the TwoWay write-back and threw `XamlParseException → InvalidOperationException`, crashing the app before any window appeared. The progress value is display-only (VM → UI only), so `Mode=OneWay` is the correct, clean fix. No other XAML bindings were affected.

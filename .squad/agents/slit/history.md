@@ -7,6 +7,15 @@
 
 ## Learnings
 
+### 2026-05-31: ProgressBar TwoWay Binding Crash — Bug Fix
+
+- **Bug:** `ProgressBar.Value="{Binding ProgressValue}"` caused `XamlParseException` at startup. `RangeBase.Value` (and `ProgressBar.Value`) binds **TwoWay by default**. WPF tried to write back through the binding and hit `ProgressValue`'s `private set`, which it cannot access — hence the `InvalidOperationException`.
+- **Fix:** Added `Mode=OneWay` → `Value="{Binding ProgressValue, Mode=OneWay}"`. The progress bar is display-only; the value only ever flows VM → UI.
+- **Audit note:** Scanned all XAML (MainWindow.xaml, AmbiguousMappingDialog.xaml, WarningsDialog.xaml). Only `ProgressBar.Value` was affected. `TextBox.Text` for `ConfiguredPath` and `ComboBox.SelectedItem` for `SelectedOption` are intentionally TwoWay and both target public setters — those are fine.
+- **PropertyChanged:** `ProgressValue` already raises `PropertyChanged` via `SetField` in `ViewModelBase` — the bar still animates during installs.
+- **Lesson — compile ≠ runs for WPF:** XAML binding errors are runtime-only; the app will build cleanly and still crash on startup. Always **launch-test** after UI changes, not just build-test.
+- **Watch out for TwoWay-default bindings against `private set` / get-only VM props:** `ProgressBar.Value`, `Slider.Value`, `ComboBox.SelectedItem`, `ComboBox.SelectedValue`, `CheckBox.IsChecked`, `ToggleButton.IsChecked`, `TextBox.Text` all bind TwoWay by default. If the VM property has `private set` or no setter, add `Mode=OneWay`.
+
 ### 2026-05-31: Stack Decision & Handoff (via Furiosa)
 - **Stack:** C# / .NET 10 + WPF. Solution: `EWSR_PMR_ModApp.slnx` at repo root.
 - **Your module:** `src/EWSR_PMR_ModApp.UI/` (WPF shell, depends on Core).
