@@ -1,10 +1,2 @@
-namespace EWSR_PMR_ModApp.Core.ZipHandling;
-
-/// <summary>
-/// Validates and extracts mod zip archives safely.
-/// Handles partial/corrupt zips and nested folder structures.
-/// </summary>
-public class ZipExtractor
-{
-    // TODO: Implement extraction with validation and progress reporting.
-}
+// This file is superseded by ZipService.cs / IZipService.cs in this folder.
+// Left as an empty placeholder to avoid breaking the project structure.

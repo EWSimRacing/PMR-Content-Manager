@@ -1,10 +1,2 @@
-namespace EWSR_PMR_ModApp.Core.Manifest;
-
-/// <summary>
-/// Tracks which mod files are installed, their source zip, and original file hashes.
-/// Persisted as JSON alongside the app data.
-/// </summary>
-public class InstallManifest
-{
-    // TODO: Implement manifest read/write and file tracking.
-}
+// This file is superseded by AppManifest.cs / ManifestStore.cs / ModEntry.cs in this folder.
+// Left as an empty placeholder to avoid breaking the project structure.

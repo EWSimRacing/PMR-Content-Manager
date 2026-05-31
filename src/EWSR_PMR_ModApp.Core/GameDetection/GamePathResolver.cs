@@ -1,9 +1,2 @@
-namespace EWSR_PMR_ModApp.Core.GameDetection;
-
-/// <summary>
-/// Locates the Project Motor Racing install directory via Steam/registry/manual config.
-/// </summary>
-public class GamePathResolver
-{
-    // TODO: Implement Steam libraryfolders.vdf parsing and registry fallback.
-}
+// This file is superseded by GameLocator.cs / IGameLocator.cs in this folder.
+// Left as an empty placeholder to avoid breaking the project structure.

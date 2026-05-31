@@ -3,4 +3,7 @@
     <Project Path="src/EWSR_PMR_ModApp.Core/EWSR_PMR_ModApp.Core.csproj" />
     <Project Path="src/EWSR_PMR_ModApp.UI/EWSR_PMR_ModApp.UI.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EWSR_PMR_ModApp.Core.Tests/EWSR_PMR_ModApp.Core.Tests.csproj" />
+  </Folder>
 </Solution>

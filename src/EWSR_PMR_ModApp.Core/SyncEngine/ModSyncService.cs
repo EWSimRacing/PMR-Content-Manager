@@ -1,9 +1,2 @@
-namespace EWSR_PMR_ModApp.Core.SyncEngine;
-
-/// <summary>
-/// Orchestrates mod installation and re-application after game updates.
-/// </summary>
-public class ModSyncService
-{
-    // TODO: Implement install, uninstall, and re-apply logic.
-}
+// This file is superseded by SyncEngine.cs / ISyncEngine.cs in this folder.
+// Left as an empty placeholder to avoid breaking the project structure.

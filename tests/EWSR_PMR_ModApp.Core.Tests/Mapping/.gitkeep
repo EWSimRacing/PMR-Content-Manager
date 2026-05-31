@@ -1,0 +1,3 @@
+// MappingResolverTests are in the root of the test project (MappingResolverTests.cs)
+// as required by the canonical test project layout inherited from Nux's smoke test file.
+// This file intentionally left as a placeholder — see ../MappingResolverTests.cs.
