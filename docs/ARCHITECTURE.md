@@ -84,6 +84,92 @@ The orchestrator. Coordinates install, uninstall, and the key "re-apply" flow:
 
 ---
 
+## File Mapping Strategy
+
+### Decision: Hybrid (option C) — path-overlay primary, filename-index fallback
+
+**Install-target root:** `C:\Program Files\Project Motor Racing\data` (resolved by GameDetection; manual override supported).
+
+#### Primary strategy — mirror zip structure (path overlay)
+
+Most racing-sim mod authors package zips that preserve the relative path under the game's `data` folder. The engine handles two common variants:
+
+1. **Zip contains a `data/` root folder** — strip it and overlay contents onto the data root.
+2. **Zip starts with a sub-path that exists under `data/`** (e.g. `vehicles/…`, `tracks/…`) — overlay directly onto data root.
+
+Detection heuristic (in order):
+- If the zip's top-level entry is exactly `data/` → strip it, overlay remainder.
+- Else, if every top-level directory in the zip matches a known child folder of the `data` root → overlay as-is.
+- Else → fall through to filename-index fallback.
+
+#### Fallback — filename-index matching
+
+If the zip is flat (no meaningful folder structure), the engine indexes every file currently under `data` by filename. For each file in the zip:
+- If exactly one on-disk file shares that filename → map to it.
+- If multiple matches → disambiguate by path similarity (Levenshtein or common-suffix scoring). If still ambiguous → surface to the user for manual confirmation before install.
+- If zero matches → treat as a **new file** (see edge cases below).
+
+#### Edge-case handling
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Flat zip, no folders | Use filename-index fallback |
+| Zip root IS `data/` | Strip `data/` prefix, overlay |
+| Zip root is a subfolder of `data/` (e.g. `vehicles/`) | Overlay directly |
+| File in zip has no match on disk (new file) | Allow install if path overlay is unambiguous; prompt user if filename-index produced it (could be typo or genuinely new content) |
+| Two mods map to the same target file | Conflict — warn user, record in manifest, last-write-wins with prior mod's version stored in backup stack |
+| `modinfo.json` present in zip | Honour it as authoritative mapping (see future enhancement below) |
+
+#### Install manifest fields (per installed file)
+
+```json
+{
+  "modId": "uuid-of-mod",
+  "sourceZipHash": "SHA256 of the original zip",
+  "files": [
+    {
+      "relativeTargetPath": "vehicles/car_a/livery.dds",
+      "sourcePathInZip": "data/vehicles/car_a/livery.dds",
+      "mappingMethod": "path-overlay | filename-index | modinfo",
+      "originalFileHash": "SHA256 of the game's original file (null if new file)",
+      "installedFileHash": "SHA256 of the mod file written to disk",
+      "isNewFile": false
+    }
+  ]
+}
+```
+
+This makes every install fully deterministic and reversible: uninstall restores originals by hash; re-apply compares `installedFileHash` against on-disk state.
+
+#### Future enhancement — `modinfo.json`
+
+The app should accept (but never require) a small manifest inside the zip:
+
+```json
+{
+  "name": "My Livery Pack",
+  "author": "Someone",
+  "version": "1.0",
+  "files": {
+    "livery.dds": "vehicles/car_a/livery.dds",
+    "preview.png": "vehicles/car_a/preview.png"
+  }
+}
+```
+
+When present, `modinfo.json` is treated as the authoritative mapping — no heuristics run. This removes all ambiguity for mod authors who opt in. The app works fully without it ("dumb zips just work").
+
+#### GameDetection implications
+
+- Must resolve `data` root as `{gameInstallPath}\data` and validate its existence on startup.
+- Default path: `C:\Program Files\Project Motor Racing\data`.
+- Since `Program Files` is ACL-protected, the engine must:
+  1. Check write access to `data` at startup.
+  2. If denied, prompt user to run the app elevated (or request specific folder permission).
+  3. Surface a clear error — never silently fail a file copy.
+
+---
+
 ## Work Breakdown
 
 - **Nux (Core dev):** Implements modules 1–5 above, with unit tests.
