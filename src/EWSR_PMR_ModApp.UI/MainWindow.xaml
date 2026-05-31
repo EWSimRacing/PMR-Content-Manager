@@ -158,7 +158,11 @@
                             Margin="28"
                             CornerRadius="14"
                             BorderThickness="2"
-                            AllowDrop="True">
+                            AllowDrop="True"
+                            DragEnter="Window_DragEnter"
+                            DragOver="Window_DragOver"
+                            DragLeave="Window_DragLeave"
+                            Drop="Window_Drop">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background"   Value="{StaticResource MantleBrush}"/>
