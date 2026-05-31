@@ -167,3 +167,23 @@ The WPF UI shell for `src/EWSR_PMR_ModApp.UI` is now fully implemented. Key deci
 **What:** Added `Mode=OneWay` to `ProgressBar.Value` binding in `MainWindow.xaml` (line 357). Changed `Value="{Binding ProgressValue}"` → `Value="{Binding ProgressValue, Mode=OneWay}"`.
 
 **Why:** `RangeBase.Value` (the base of `ProgressBar`) binds TwoWay by default. `MainViewModel.ProgressValue` has a `private set`, which WPF cannot write to from outside the class. At startup WPF attempted the TwoWay write-back and threw `XamlParseException → InvalidOperationException`, crashing the app before any window appeared. The progress value is display-only (VM → UI only), so `Mode=OneWay` is the correct, clean fix. No other XAML bindings were affected.
+
+---
+
+### 2026-05-31T18:41:06-04:00: Fix WPF Drag-and-Drop for Elevated App
+
+**By:** Slit
+
+**What:**
+Two changes to `src/EWSR_PMR_ModApp.UI/`:
+
+1. **`MainWindow.xaml.cs`** — Added P/Invoke for `ChangeWindowMessageFilterEx` (user32.dll) and overrode `OnSourceInitialized` to call it with `MSGFLT_ALLOW` for `WM_DROPFILES (0x0233)`, `WM_COPYDATA (0x004A)`, and `WM_COPYGLOBALDATA (0x0049)` on the window's HWND via `WindowInteropHelper`. Added `using System.Runtime.InteropServices` and `using System.Windows.Interop`.
+
+2. **`MainWindow.xaml`** — Added `AllowDrop="True"` directly to `DropZoneBorder` (was only on the `Window`).
+
+No Core files modified. Build: 0 errors / 0 warnings. Tests: 56/56. Launch-test: window opens, no crash.
+
+**Why:**
+- **UIPI** (primary fix): This app supports "Restart as Administrator". When running elevated, Windows UIPI silently blocks drag-drop messages (`WM_DROPFILES` etc.) sent from a non-elevated process like Explorer. The result is zero cursor feedback and a silently rejected drop — exactly the symptom reported. `ChangeWindowMessageFilterEx` with `MSGFLT_ALLOW` opens those three message channels for this specific HWND, restoring Explorer→app drag-drop when elevated.
+- **AllowDrop on drop target** (belt-and-suspenders): WPF drag-drop events need `AllowDrop="True"` on the element the cursor is actually over, not only on a parent. The `DropZoneBorder` already had a non-null `Background` (hit-testable), so adding `AllowDrop="True"` directly to it ensures the drag routing works correctly regardless of bubbling subtleties.
+- The existing `DragOver`/`DragEnter`/`Drop` handlers were already correctly written: `Effects=Copy`, `Handled=true`, `FileDrop` read with `.zip` filter, routed to `InstallZipsAsync` — the same method the Browse button uses.

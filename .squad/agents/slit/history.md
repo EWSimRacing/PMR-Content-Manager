@@ -84,3 +84,25 @@ All files live under `src/EWSR_PMR_ModApp.UI/`:
 - **Elevation:** if the game is under Program Files and the app isn't elevated, the orange banner appears with the "Restart as Administrator" button.
 - **No Core API gaps found** — all Core interfaces and concrete types had sufficient constructors for DI registration.
 
+
+### 2026-05-31: Drag-and-Drop Fix — UIPI + AllowDrop
+
+#### Root Causes Found
+1. **UIPI (primary — almost certainly the live blocker):** When the app is relaunched as Administrator, it runs at a higher integrity level than Explorer. Windows UIPI silently blocks `WM_DROPFILES` / `WM_COPYDATA` / `WM_COPYGLOBALDATA` from reaching the elevated window — no cursor change, nothing on drop. The standard fix is to call `ChangeWindowMessageFilterEx` (user32.dll) with `MSGFLT_ALLOW` on each of those three message IDs immediately after the HWND is created.
+2. **`AllowDrop` on the drop target element (belt-and-suspenders):** `AllowDrop="True"` was only on the `Window`. The element actually under the cursor needs it, not just a parent. Added `AllowDrop="True"` directly to `DropZoneBorder` (which already has a non-null `Background` via its Style, so it IS hit-testable).
+
+#### What was already correct
+- `DragOver` set `e.Effects = DragDropEffects.Copy` + `e.Handled = true`
+- `DragEnter` set `e.Effects = DragDropEffects.Copy` + `e.Handled = true`
+- `Drop` read `DataFormats.FileDrop`, filtered `.zip` (case-insensitive), called `InstallZipsAsync`
+- Browse button calls the same `InstallZipsAsync` — single shared code path
+
+#### Changes made
+- `MainWindow.xaml.cs`: Added P/Invoke for `ChangeWindowMessageFilterEx`. Overrode `OnSourceInitialized` to call it for `WM_DROPFILES (0x0233)`, `WM_COPYDATA (0x004A)`, `WM_COPYGLOBALDATA (0x0049)` on the window HWND via `WindowInteropHelper`. Safe to always run — harmless on non-elevated, essential when elevated.
+- `MainWindow.xaml`: Added `AllowDrop="True"` to `DropZoneBorder`.
+
+#### Lessons
+- **Elevated WPF + Explorer drag-drop = UIPI block.** Any app that uses "Restart as Administrator" and accepts file drops from Explorer MUST call `ChangeWindowMessageFilterEx` for the three drag messages. This is a silent failure — no error, no cursor, just nothing.
+- **`ChangeWindowMessageFilterEx` requires the HWND** — call it in `OnSourceInitialized` (HWND exists), NOT in the constructor (too early, HWND is null).
+- **`AllowDrop` on the exact drop-target element, not just a parent.** Set it on the visual border/panel the user drops onto.
+- **`Background` must be non-null on the drop element** — a null/transparent background element is not hit-testable.

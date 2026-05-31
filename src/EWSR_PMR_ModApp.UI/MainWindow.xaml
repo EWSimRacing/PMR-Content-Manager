@@ -157,7 +157,8 @@
                     <Border x:Name="DropZoneBorder"
                             Margin="28"
                             CornerRadius="14"
-                            BorderThickness="2">
+                            BorderThickness="2"
+                            AllowDrop="True">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background"   Value="{StaticResource MantleBrush}"/>
