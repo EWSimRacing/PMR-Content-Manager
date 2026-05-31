@@ -1,5 +1,36 @@
 # History: Nux — Core Dev
 
+## Learnings
+
+### 2026-05-31: ZipHandling Skip Logic Implemented
+
+**What was built:**
+- `SkipCategory.cs` — 9-value enum classifying every zip entry disposition
+- `SkippedFile.cs` — record(PathInZip, Category, Reason) for reporting
+- `InstallResult.cs` — record(Success, Installed, Skipped, Warnings); used by SyncEngine
+- `FileClassifier.cs` — static classifier; `Classify(entry, modInfo, out reason)` applies 9-step ordered policy
+- `ZipEntryInfo.cs` — extended with `Category` and `SkipReason` mutable properties
+- `ModInfo.cs` — expanded to full spec: SchemaVersion, Description, Website, MinGameVersion, Tags, DisplayFiles (with `DisplayFileInfo` nested class), SkipFiles
+- `ZipStagingResult.cs` — extended with `DisplayFiles` and `SkippedFiles` buckets
+- `ZipService.StageAsync` — now classifies all entries post-extraction; splits into `Entries` (Install+AmbiguousPending), `DisplayFiles`, `SkippedFiles`
+
+**Key implementation notes:**
+- Classification order: modinfo.SkipFiles → modinfo.DisplayFiles override → UnsafeFile → PackagingArtifact → MetaFile → DisplayOnly docs → Image (conditional) → GameData (conditional) → NoPathMatch
+- `IsInsideDataPath` uses `data/` prefix (case-insensitive); textures inside `data/` are Install even if images
+- Docs (.md/.txt/.pdf) inside `data/` get NoPathMatch — unusual placement, not a valid game file
+- Glob matching is pure Regex, no NuGet packages: `*` → `[^/]*`, `**` → `.*`, `?` → `.`; patterns without `/` matched against filename only
+- `modinfo.json` DisplayFiles keys are checked by exact zip path match before extension classifier runs
+- All 60 existing tests remain green after the change
+
+**Build:** `dotnet build src\EWSR_PMR_ModApp.Core\...csproj` → 0 errors, 0 warnings
+**Tests:** 60 passed, 0 failed, 0 skipped
+
+### 2026-05-31T19:52:00-04:00: Team Integration
+- **Furiosa's design work merged:** Zip Skip Policy decision document captured taxonomy, extension policy, modinfo.json v1 spec, UI surfacing strategy.
+- **Session status:** ✓ Policy design + implementation complete; all 60 tests passing.
+- **Decision archived:** Both decisions merged into `.squad/decisions.md` (Furiosa + Nux).
+- **Next owner:** Slit (UI updates to show skip breakdown in WarningsDialog and mod detail file list).
+
 ## Seed
 - Project: EWSR_PMR_ModApp — a mod manager for Project Motor Racing.
 - My domain: file sync engine, zip extraction/validation, game path detection, update-revert recovery, backups.

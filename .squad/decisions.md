@@ -332,3 +332,59 @@ Elliott should review:
 3. modinfo.json spec — any fields needed for EWSR workflow?
 4. Packaging guide — clear enough for EWSR_PMR_Tools integration?
 
+---
+
+### 2026-05-31T19:52:00-04:00: Zip Skip Logic — FileClassifier and ModInfo Expansion
+
+**By:** Nux
+
+## What
+
+Implemented the full ZipHandling Skip Logic as specified in `docs/ARCHITECTURE.md` (Skip Logic section).
+
+### New files
+- `SkipCategory.cs` — 9-value enum (Install, DisplayOnly, NoPathMatch, MetaFile, HashMatch, UserExcluded, AmbiguousPending, Collision, UnsafeFile)
+- `SkippedFile.cs` — `sealed record SkippedFile(string PathInZip, SkipCategory Category, string Reason)`
+- `InstallResult.cs` — `sealed record InstallResult(bool Success, IReadOnlyList<ZipEntryInfo> Installed, IReadOnlyList<SkippedFile> Skipped, IReadOnlyList<string> Warnings)`
+- `FileClassifier.cs` — static class; `Classify(ZipEntryInfo, ModInfo?, out string?)` applies ordered 9-step policy
+
+### Modified files
+- `ZipEntryInfo.cs` — added `Category` (SkipCategory, default Install) and `SkipReason` (string?) mutable properties
+- `ModInfo.cs` — expanded to full spec: SchemaVersion, Description, Website, MinGameVersion, Tags, DisplayFiles dict (with nested DisplayFileInfo class), SkipFiles list
+- `ZipStagingResult.cs` — added `DisplayFiles` and `SkippedFiles` buckets
+- `ZipService.StageAsync` — classifies all entries after extraction; routes into Entries (Install+AmbiguousPending), DisplayFiles, SkippedFiles
+
+## Classification Policy (ordered)
+
+1. modinfo.json `SkipFiles` glob patterns → `UserExcluded`
+2. modinfo.json `DisplayFiles` key match → `DisplayOnly` (explicit override)
+3. Unsafe extensions (.exe, .dll, .bat, .cmd, .ps1, .sh, .vbs, .msi, .reg) → `UnsafeFile`
+4. Packaging artifacts (.bak, .log, .tmp, .cache, .zip, .rar, .7z, thumbs.db, .DS_Store, `__MACOSX/**`, `.git/**`) → `NoPathMatch`
+5. `modinfo.json` at zip root → `MetaFile`
+6. Docs (.md, .txt, .pdf) → `DisplayOnly`; unless inside `data/` → `NoPathMatch`
+7. Images (.png, .jpg, .jpeg, .gif, .webp) → `Install` if inside `data/`; `DisplayOnly` if at zip root or in preview/images/screenshots; else `NoPathMatch`
+8. Game data formats (.xml, .hadron, .tweakers, .i3d, .dds, .ini, .cfg, .bin, .lut, .json) → `Install` if inside `data/`; else `NoPathMatch`
+9. Everything else → `NoPathMatch`
+
+## Glob matching
+
+Pure regex conversion (no NuGet packages):
+- `*` → `[^/]*` (within one path segment)
+- `**` → `.*` (across segments)  
+- `?` → `.` (single char)
+
+Patterns without `/` are matched against filename only; patterns with `/` are matched against full zip path.
+
+## Why
+
+- Furiosa's spec in ARCHITECTURE.md defines the exact policy; implementation follows it precisely.
+- modinfo.json overrides come first so explicit mod author intent always wins over heuristics.
+- UnsafeFile checked before everything else — security invariant cannot be bypassed by path tricks.
+- Game data files require `data/` prefix path to avoid accidental installs of ambiguously-named files.
+- No new NuGet packages added; glob via regex keeps Core dependency-free.
+
+## Build & Test Result
+
+- `dotnet build src/EWSR_PMR_ModApp.Core/...csproj` → **0 errors, 0 warnings**
+- `dotnet test tests/EWSR_PMR_ModApp.Core.Tests` → **60 passed, 0 failed, 0 skipped**
+

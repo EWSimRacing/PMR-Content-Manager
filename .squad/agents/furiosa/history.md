@@ -37,3 +37,10 @@
 - **Key insight:** Display-only category lets READMEs and previews exist in the mod manager UI without ever touching the game directory — solves Elliott's "README_*.md at zip root" use case cleanly.
 - **Deliverables:** Updated `docs/ARCHITECTURE.md` (skip logic + modinfo spec), new `docs/MOD_PACKAGING_GUIDE.md` (practical author reference).
 - **Next:** Nux implements `SkipCategory` enum and filtering in ZipService; Slit updates install result UI to show skip breakdown.
+
+### 2026-05-31T19:52:00-04:00: Zip Skip Logic Implementation Complete (Nux)
+- **Status:** ✓ Complete — Nux implemented all 4 new classes (SkipCategory, SkippedFile, InstallResult, FileClassifier) + expanded ModInfo.cs + integrated ZipService classification pipeline.
+- **Test result:** 60/60 passing, 0 errors, 0 warnings.
+- **Integration:** Nux also fixed collision detection and warning message formatting (per Elliott's request for file-by-file transparency).
+- **Team status:** Policy design and implementation both complete; decision merged into `.squad/decisions.md`.
+- **Next owner:** Slit (UI updates for skip display in WarningsDialog and mod detail file list).
