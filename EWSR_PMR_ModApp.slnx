@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EWSR_PMR_ModApp.Core/EWSR_PMR_ModApp.Core.csproj" />
+    <Project Path="src/EWSR_PMR_ModApp.UI/EWSR_PMR_ModApp.UI.csproj" />
+  </Folder>
+</Solution>

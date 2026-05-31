@@ -1,0 +1,10 @@
+{
+  "universes": [
+    "mad-max", "alien", "blade-runner", "the-matrix", "star-wars",
+    "dune", "the-expanse", "firefly", "battlestar-galactica", "tron",
+    "cyberpunk", "halo", "mass-effect", "deus-ex", "ghost-in-the-shell"
+  ],
+  "capacity_min": 6,
+  "capacity_max": 25,
+  "one_universe_per_assignment": true
+}

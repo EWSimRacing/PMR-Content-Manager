@@ -1,0 +1,11 @@
+{
+  "assignments": [
+    {
+      "assignment_id": "ewsr-pmr-modapp-2026-05-31",
+      "universe": "mad-max",
+      "created_at": "2026-05-31",
+      "members": ["Furiosa", "Nux", "Slit", "Wez"]
+    }
+  ],
+  "universe_usage": { "mad-max": "2026-05-31" }
+}

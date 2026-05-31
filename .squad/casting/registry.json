@@ -1,0 +1,8 @@
+{
+  "agents": [
+    { "persistent_name": "Furiosa", "role": "Lead", "universe": "mad-max", "created_at": "2026-05-31", "legacy_named": false, "status": "active" },
+    { "persistent_name": "Nux", "role": "Core Dev", "universe": "mad-max", "created_at": "2026-05-31", "legacy_named": false, "status": "active" },
+    { "persistent_name": "Slit", "role": "UI Dev", "universe": "mad-max", "created_at": "2026-05-31", "legacy_named": false, "status": "active" },
+    { "persistent_name": "Wez", "role": "Tester", "universe": "mad-max", "created_at": "2026-05-31", "legacy_named": false, "status": "active" }
+  ]
+}
