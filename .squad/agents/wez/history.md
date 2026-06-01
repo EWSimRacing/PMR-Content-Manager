@@ -57,3 +57,33 @@ tests/EWSR_PMR_ModApp.Core.Tests/
 
 **Deleted**: `src/EWSR_PMR_ModApp.Tests` (entire directory) — confirmed not referenced in slnx.
 
+### Session: FileClassifier unit tests (2026-05-31)
+
+**Test file location**: `tests/EWSR_PMR_ModApp.Core.Tests/ZipHandling/FileClassifierTests.cs`
+
+**Test count**: 52 test cases (51 passing, 1 skipped for production bug). Total suite after addition: 112 (111 passed, 1 skipped).
+
+**FileClassifier is a pure static class — no dependencies needed.**
+`FileClassifier.Classify(ZipEntryInfo, ModInfo?)` has a convenience overload that discards `out string? reason`. Tests use that overload exclusively; no `out` variable plumbing needed.
+
+**ZipEntryInfo requires `FullNameInZip` and `StagedFilePath` (required inits).**
+`FileName` is a computed property (`Path.GetFileName(FullNameInZip)`) — do not set it; derive your fixture from `FullNameInZip` only.
+
+**`[Theory]` + `[InlineData]` is the right tool for extension/path matrix tests.**
+FileClassifier's decisions are almost entirely driven by extension and path prefix — a single `[Theory]` with `[InlineData]` covering the interesting variants is cleaner than separate `[Fact]` methods per value.
+
+**Production bug found — FileClassifier does not check `modInfo.Files`.**
+Files explicitly listed in `modInfo.Files` (the zip→target mapping dictionary) are NOT classified as Install by `FileClassifier`. The method checks `modInfo.SkipFiles` and `modInfo.DisplayFiles` but not `modInfo.Files`. A file with an unrecognized extension listed in `modInfo.Files` falls through to `NoPathMatch`. Flagged to Nux via `.squad/decisions/inbox/wez-classifier-tests.md`.
+Test `ModinfoFiles_ExplicitEntry_IsInstall_EvenIfExtensionWouldBeNoPathMatch` is skipped with an explicit ⚠️ message pending the production fix.
+
+**`DATA/tracks/circuit.xml` (uppercase DATA/) is correctly classified as Install.**
+`IsInsideDataPath` uses `StartsWith("data/", OrdinalIgnoreCase)` — the case-insensitive check works for both the path prefix and the extension.
+
+## Orchestration (2026-05-31)
+
+**Scribe merged and logged FileClassifier session:**
+- 52 test cases delivered (51 passing, 1 skipped)
+- Total suite: 112 tests (111 passed, 1 skipped, 0 failed)
+- Decision inbox merged to decisions.md
+- Production bug logged: `modInfo.Files` missing from FileClassifier.Classify check
+
