@@ -132,3 +132,58 @@ The UX impact of the helper approach: the user sees a UAC prompt once when they 
 3. If log reveals something unexpected → reassess
 4. Follow-up task: implement `EWSR_PMR_ModApp.Installer.exe` with named-pipe IPC
 
+# Decision: Home navigation + app logo (nav pattern + branding)
+
+**Date:** 2026-05-31T21:21:54-04:00
+**Author:** Slit (UI Dev)
+**Status:** Implemented
+
+---
+
+## Home navigation pattern
+
+### Problem
+When the user opened Settings there was no obvious return path — the only way back was to click ⚙ Settings again (toggling), which is non-obvious.
+
+### Decision
+- Added `HomeCommand` (RelayCommand, `IsSettingsVisible = false`) to `MainViewModel`.
+- Added a `🏠  Home` button in the toolbar right StackPanel, **before** Re-check and Settings.
+- `Visibility` bound to `IsSettingsVisible` with `BoolToVisConverter` → button is **invisible on the home screen** and **visible only when in Settings**.
+- `IsEnabled` bound to `IsNotBusy` — consistent with every other toolbar button.
+
+### Rationale
+Toggling ToggleSettingsCommand was kept for the Settings button (it already works; removing it would break keyboard/command users). The Home button adds an explicit, labeled affordance that disappears when not needed, so the toolbar is never cluttered with a redundant button.
+
+---
+
+## App logo
+
+### Problem
+The app had no visual identity — just a 🎮 emoji in the toolbar title.
+
+### Decision
+
+**Logo concept — "Checkered Mod":**
+- 2×2 racing-flag grid on a dark rounded-rect background (32×32 viewbox).
+- AccentBrush (#89B4FA, Catppuccin Mocha blue): top-left and bottom-right squares.
+- Surface0Brush (#313244): top-right and bottom-left squares.
+- Background: MantleBrush (#181825).
+- Flat, no gradients. Reads at 16–40 px.
+
+**Implementation:**
+- `Assets/logo.svg` — editable SVG source (build action `None`, design-time only).
+- `Assets/Logo.xaml` — WPF `ResourceDictionary` with `DrawingImage x:Key="LogoDrawingImage"` (compiled as `Page`, merged into App.xaml).
+- Toolbar: `<Image Source="{StaticResource LogoDrawingImage}" Width="28" Height="28"/>` replaces the 🎮 emoji.
+
+**Window.Icon — NOT set:**
+`Window.Icon` requires a `BitmapFrame`/HICON for correct taskbar rendering. `DrawingImage` inherits from `ImageSource` but WPF's native window chrome code path for the taskbar icon rasterises via HICON, making DrawingImage unreliable there. The toolbar `Image` uses DrawingImage correctly (WPF renders it via the visual tree). A `<!-- TODO: ship a .ico for taskbar icon (packaging) -->` comment documents this. Action item: generate a multi-size logo.ico from logo.svg and set `Window.Icon` — route to Furiosa/Nux for packaging.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/EWSR_PMR_ModApp.UI/Assets/Logo.xaml` | New — DrawingImage resource |
+| `src/EWSR_PMR_ModApp.UI/Assets/logo.svg` | New — SVG source of truth |
+| `src/EWSR_PMR_ModApp.UI/App.xaml` | Wrap resources in ResourceDictionary; add MergedDictionaries → Logo.xaml |
+| `src/EWSR_PMR_ModApp.UI/MainWindow.xaml` | Replace 🎮 with Image; add 🏠 Home button; add Window.Icon TODO |
+| `src/EWSR_PMR_ModApp.UI/ViewModels/MainViewModel.cs` | Add HomeCommand property + instantiation |
