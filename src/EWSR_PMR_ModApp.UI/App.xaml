@@ -5,6 +5,10 @@
              xmlns:infra="clr-namespace:EWSR_PMR_ModApp.UI.Infrastructure"
              Startup="OnStartup">
     <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Assets/Logo.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
         <!-- ── Converters ─────────────────────────────────────────────────── -->
         <infra:BoolToVisibilityConverter        x:Key="BoolToVisConverter"/>
@@ -153,5 +157,6 @@
             <Setter Property="Margin"     Value="0,6"/>
         </Style>
 
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

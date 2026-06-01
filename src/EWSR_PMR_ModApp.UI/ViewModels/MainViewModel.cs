@@ -56,6 +56,7 @@ public sealed class MainViewModel : ViewModelBase
         BrowseCommand         = new AsyncRelayCommand(BrowseAsync,   () => !IsBusy);
         ReapplyCommand        = new AsyncRelayCommand(ReapplyAsync,   () => !IsBusy);
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
+        HomeCommand           = new RelayCommand(() => IsSettingsVisible = false);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ public sealed class MainViewModel : ViewModelBase
     public AsyncRelayCommand BrowseCommand         { get; }
     public AsyncRelayCommand ReapplyCommand        { get; }
     public RelayCommand      ToggleSettingsCommand { get; }
+    public RelayCommand      HomeCommand           { get; }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Initialization

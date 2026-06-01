@@ -35,7 +35,14 @@
 
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <TextBlock Text="🎮  Project Motor Racing Mod Manager"
+                    <!-- TODO (packaging): set Window.Icon to a compiled .ico (BitmapFrame) —
+                         DrawingImage is not reliable as a taskbar HICON.  See Assets/logo.svg. -->
+                    <Image Source="{StaticResource LogoDrawingImage}"
+                           Width="28" Height="28"
+                           Margin="0,0,8,0"
+                           VerticalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Project Motor Racing Mod Manager"
                                FontSize="15"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource AccentBrush}"
@@ -54,6 +61,13 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <Button Content="🏠  Home"
+                            Command="{Binding HomeCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Visibility="{Binding IsSettingsVisible,
+                                Converter={StaticResource BoolToVisConverter}}"
+                            Margin="0,0,8,0"
+                            ToolTip="Return to mod installer"/>
                     <Button Content="Re-check &amp; Reapply"
                             Command="{Binding ReapplyCommand}"
                             IsEnabled="{Binding IsNotBusy}"

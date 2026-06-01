@@ -1,0 +1,56 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        PMR Mod Manager logo — "Checkered Mod" mark.
+        Design: flat 2×2 racing-flag grid on a dark rounded background.
+          • Top-left  + bottom-right squares = AccentBrush (#89B4FA, Catppuccin Mocha blue)
+          • Top-right + bottom-left  squares = Surface0Brush (#313244, dark mid-tone)
+          • Background = MantleBrush (#181825)
+        ViewBox 32×32.  Reads cleanly at 16–40 px.
+        SVG source of truth: Assets/logo.svg
+    -->
+    <DrawingImage x:Key="LogoDrawingImage">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+
+                <!-- Rounded dark background -->
+                <GeometryDrawing Brush="#181825">
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="0,0,32,32" RadiusX="6" RadiusY="6"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Accent squares: top-left and bottom-right -->
+                <GeometryDrawing Brush="#89B4FA">
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+                            <RectangleGeometry Rect="3,3,13,13"/>
+                            <RectangleGeometry Rect="16,16,13,13"/>
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Surface squares: top-right and bottom-left -->
+                <GeometryDrawing Brush="#313244">
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+                            <RectangleGeometry Rect="16,3,13,13"/>
+                            <RectangleGeometry Rect="3,16,13,13"/>
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!--
+        TODO (packaging): generate a .ico from logo.svg at 16/32/48/256 px and set
+        Window.Icon="path/to/logo.ico" (BitmapFrame source) so the taskbar and
+        Alt-Tab show the branded icon.  Route to Furiosa/Nux for the packaging step.
+        Window.Icon with a DrawingImage source is not reliable for taskbar HICON
+        conversion — do not use DrawingImage for Window.Icon.
+    -->
+
+</ResourceDictionary>
