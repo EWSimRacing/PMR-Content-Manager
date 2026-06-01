@@ -156,34 +156,78 @@ Toggling ToggleSettingsCommand was kept for the Settings button (it already work
 
 ---
 
-## App logo
+## App logo (SUPERSEDED — see "PMR Gauge Badge Logo" below)
+
+**Status:** Superseded 2026-05-31T21:36:43-04:00
+
+The "Checkered Mod" design was rejected by Elliott and replaced with the PMR Gauge Badge concept.
+
+---
+
+## Decision: PMR Gauge Badge Logo
+
+**Date:** 2026-05-31T21:36:43-04:00  
+**Author:** Slit (UI Dev)  
+**Status:** Implemented
+
+---
 
 ### Problem
-The app had no visual identity — just a 🎮 emoji in the toolbar title.
 
-### Decision
+The original "Checkered Mod" logo (a 2×2 racing-flag grid) was rejected by Elliott. He requested a design inspired by the **AMS2 Content Manager** aesthetic but branded for **PMR (Project Motor Racing)**.
 
-**Logo concept — "Checkered Mod":**
-- 2×2 racing-flag grid on a dark rounded-rect background (32×32 viewbox).
-- AccentBrush (#89B4FA, Catppuccin Mocha blue): top-left and bottom-right squares.
-- Surface0Brush (#313244): top-right and bottom-left squares.
-- Background: MantleBrush (#181825).
-- Flat, no gradients. Reads at 16–40 px.
+### Research: AMS2/AC Content Manager Design Language
 
-**Implementation:**
-- `Assets/logo.svg` — editable SVG source (build action `None`, design-time only).
-- `Assets/Logo.xaml` — WPF `ResourceDictionary` with `DrawingImage x:Key="LogoDrawingImage"` (compiled as `Page`, merged into App.xaml).
-- Toolbar: `<Image Source="{StaticResource LogoDrawingImage}" Width="28" Height="28"/>` replaces the 🎮 emoji.
+Assetto Corsa Content Manager uses:
+- **Circular badge emblem** — clean, professional utility feel
+- **Dashboard/gauge motifs** — speedometer, tachometer imagery
+- **Bold monogram typography** — "CM" prominently featured
+- **Speed indicators** — chevrons, motion lines, dynamic angles
+- **Dark metallic palette** — blacks, greys, accent colors
 
-**Window.Icon — NOT set:**
-`Window.Icon` requires a `BitmapFrame`/HICON for correct taskbar rendering. `DrawingImage` inherits from `ImageSource` but WPF's native window chrome code path for the taskbar icon rasterises via HICON, making DrawingImage unreliable there. The toolbar `Image` uses DrawingImage correctly (WPF renders it via the visual tree). A `<!-- TODO: ship a .ico for taskbar icon (packaging) -->` comment documents this. Action item: generate a multi-size logo.ico from logo.svg and set `Window.Icon` — route to Furiosa/Nux for packaging.
+### Decision: PMR Gauge Badge
+
+**Design concept:** A circular motorsport badge featuring a stylized speedometer gauge, evoking a racing dashboard. The needle points toward "high speed" to suggest performance and motion.
+
+#### Visual elements:
+1. **Outer ring** — gradient border (#45475a → #313244) for badge/emblem feel
+2. **Inner disc** — dark gradient background (#1e1e2e → #11111b)
+3. **Gauge arc** — 180° speedometer arc in AccentBrush (#89B4FA)
+4. **Tick marks** — five marks around the arc (semi-transparent)
+5. **Gauge needle** — pointing top-right ("high speed")
+6. **Pivot hub** — center circle with dark inner dot
+7. **Racing chevrons** — three right-facing chevrons at bottom (motion indicator)
+
+#### Color palette (Catppuccin Mocha):
+- AccentBrush: #89B4FA (gauge, needle, chevrons)
+- Surface0Brush: #313244 (outer ring)
+- MantleBrush: #181825 / #1e1e2e (background)
+- Semi-transparent: #7089B4FA, #9989B4FA
+
+#### Technical:
+- ViewBox: 64×64 (scales cleanly to 16–48px)
+- SVG source of truth: `src/EWSR_PMR_ModApp.UI/Assets/logo.svg`
+- WPF resource: `src/EWSR_PMR_ModApp.UI/Assets/Logo.xaml` (`LogoDrawingImage` key)
+- Toolbar Image: 30×30 (bumped from 28×28)
+
+### Why Not Copy AMS2 CM?
+
+The design takes **inspiration** from Content Manager's visual language (circular badge, dashboard motifs, speed indicators) but is an **original composition** for PMR. No trademark or copyright issues — the speedometer gauge is a generic motorsport symbol.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/EWSR_PMR_ModApp.UI/Assets/Logo.xaml` | New — DrawingImage resource |
-| `src/EWSR_PMR_ModApp.UI/Assets/logo.svg` | New — SVG source of truth |
-| `src/EWSR_PMR_ModApp.UI/App.xaml` | Wrap resources in ResourceDictionary; add MergedDictionaries → Logo.xaml |
-| `src/EWSR_PMR_ModApp.UI/MainWindow.xaml` | Replace 🎮 with Image; add 🏠 Home button; add Window.Icon TODO |
-| `src/EWSR_PMR_ModApp.UI/ViewModels/MainViewModel.cs` | Add HomeCommand property + instantiation |
+| `src/EWSR_PMR_ModApp.UI/Assets/logo.svg` | Replaced checkered grid with gauge badge design |
+| `src/EWSR_PMR_ModApp.UI/Assets/Logo.xaml` | Updated DrawingImage to match new SVG |
+| `src/EWSR_PMR_ModApp.UI/MainWindow.xaml` | Image size bumped to 30×30 |
+
+### Verification
+
+- `dotnet build` — succeeds
+- `dotnet test` — 164 passed, 0 failed
+- SVG opens in browser — renders correctly
+
+### Supersedes
+
+Previous decision: "Checkered Mod" logo (decisions.md, 2026-05-31T21:21:54-04:00)
