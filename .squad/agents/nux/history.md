@@ -2,6 +2,104 @@
 
 ## Learnings
 
+### 2026-05-31T20:25:00-04:00: Elevation Broker — Phase 1 (N1–N8)
+
+**What was built:**
+
+| Task | Files |
+|------|-------|
+| N1 DTOs | `Core/Elevation/WritePlanOperation.cs`, `FileCopySpec.cs`, `FileOperationError.cs`, `WritePlanRequest.cs`, `WriteResult.cs` |
+| N2 Security | `Core/Elevation/PathValidator.cs` |
+| N3 Helper project | `src/EWSR_PMR_ModApp.Helper/` — csproj, app.manifest, added to slnx |
+| N4 Helper Program | `src/EWSR_PMR_ModApp.Helper/Program.cs` |
+| N5 Install split | `Core/SyncEngine/InstallPlan.cs`; `SyncEngine.cs` + `ISyncEngine.cs` refactored |
+| N6 IElevatedWriter | `Core/Elevation/IElevatedWriter.cs`, `WritePlanExecutor.cs`, `InProcessWriter.cs` |
+| N7 HelperProcessWriter | `Core/Elevation/HelperProcessWriter.cs` |
+| N8 Uninstall+Reapply split | `Core/SyncEngine/UninstallPlan.cs`, `ReapplyPlan.cs`; SyncEngine updated |
+
+**DTO serialization approach:** All DTO properties use `init` accessors with default empty values (no `required` keyword) to ensure STJ can round-trip them without source-gen or special options. Callers populate all fields before serializing.
+
+**Prepare/Execute split:**
+- `InstallAsync`, `UninstallAsync`, `ReapplyRevertedModsAsync` remain as thin wrappers — existing callers/tests unchanged.
+- Each operation has `PrepareXxxAsync` (pure, no disk writes) and `ExecuteXxxAsync` (writes).
+- `InstallPlan` carries `StagingDirectory`; callers MUST call `CleanupInstallPlan(plan)` to delete staging. The thin wrapper does this automatically in a `finally`.
+- If `PrepareInstallAsync` throws, it self-cleans the staging dir.
+- `ISyncEngine` gains: `PrepareInstallAsync`, `ExecuteInstallAsync`, `CleanupInstallPlan`, `PrepareUninstallAsync`, `ExecuteUninstallAsync`, `PrepareReapplyAsync`, `ExecuteReapplyAsync`.
+
+**Shared WritePlanExecutor (N6 key design):**
+- `WritePlanExecutor` (static, in Core) is called by BOTH `InProcessWriter` AND `EWSR_PMR_ModApp.Helper/Program.cs`.
+- Uses real `System.IO` (not `IFileSystem`) — both callers operate against real files.
+- Backup format identical to `BackupService`: `AppPaths.BackupDirForMod(modId)/{relativeTargetPath}`.
+- Accepts optional `Action<string> logLine` callback for per-file audit logging.
+
+**IElevatedWriter — how the UI picks the implementation (Slit must know):**
+```
+IGameLocator.CanWriteDataRoot(dataRoot)
+  ├─ true  → inject InProcessWriter  (no UAC, direct file ops)
+  └─ false → inject HelperProcessWriter (writes request JSON → spawns Helper.exe runas → reads .result.json)
+```
+`IElevatedWriter` is NOT injected into `SyncEngine` (deviation from Furiosa suggestion — see decision doc). Slit injects it into the orchestration layer: call `PrepareInstallAsync` → build `WritePlanRequest` from `InstallPlan` → call `IElevatedWriter.ExecuteAsync` → then update manifest via `IManifestStore`.
+
+**Exact ISyncEngine signatures (Slit/Wez must know):**
+```csharp
+// Install
+Task<InstallPlan> PrepareInstallAsync(string zipPath, string dataRoot, string modName,
+    Func<IReadOnlyList<AmbiguousMapping>, Task<IReadOnlyList<ResolvedMapping>>> confirmAmbiguous,
+    IProgress<SyncProgress>? progress = null, CancellationToken ct = default);
+Task<InstallResult> ExecuteInstallAsync(InstallPlan plan,
+    IProgress<SyncProgress>? progress = null, CancellationToken ct = default);
+void CleanupInstallPlan(InstallPlan plan);
+
+// Uninstall
+Task<UninstallPlan> PrepareUninstallAsync(string modId, string dataRoot, CancellationToken ct = default);
+Task<UninstallResult> ExecuteUninstallAsync(UninstallPlan plan,
+    IProgress<SyncProgress>? progress = null, CancellationToken ct = default);
+
+// Reapply
+Task<ReapplyPlan> PrepareReapplyAsync(string dataRoot, CancellationToken ct = default);
+Task<ReapplyResult> ExecuteReapplyAsync(ReapplyPlan plan,
+    IProgress<SyncProgress>? progress = null, CancellationToken ct = default);
+
+// IElevatedWriter (in Core/Elevation/)
+Task<WriteResult> ExecuteAsync(WritePlanRequest request, CancellationToken ct = default);
+// Implementations: InProcessWriter, HelperProcessWriter
+```
+
+**Packaging approach chosen:** `ProjectReference` from the UI csproj to Helper with `ReferenceOutputAssembly="false"`, `OutputItemType="Content"`, `<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>`. Result: `EWSR_PMR_ModApp.Helper.exe` + `.dll` + `.runtimeconfig.json` + `.deps.json` all land in UI's bin output. Verified in `bin\Debug\net10.0-windows\`.
+
+**Helper.exe location:** `Path.Combine(AppContext.BaseDirectory, "EWSR_PMR_ModApp.Helper.exe")` — used in `HelperProcessWriter`.
+
+**UAC cancel:** `Win32Exception.NativeErrorCode == 1223` → `WriteResult { Success=false, ErrorMessage="Elevation cancelled by user." }` — no exception thrown, Slit shows error message.
+
+**Audit log:** `%APPDATA%\EWSR_PMR_ModApp\helper.log` — timestamp, operation, per-file outcome. Never throws.
+
+**Build/test status:** `dotnet build` → 0 errors, 0 warnings. `dotnet test` → 112 passed, 0 failed, 0 skipped.
+
+**What Wez needs to add (Phase 3):**
+- `PathValidator` unit tests (traversal attacks, edge cases)
+- `WritePlanRequest`/`WriteResult` serialization round-trip tests
+- Integration test: `WritePlanExecutor.Execute` with a mock data dir (no elevation)
+- Update `InstallWarningsTests` etc. to use `PrepareInstallAsync` + `InProcessWriter` directly
+
+**What Slit needs for Phase 2:**
+- Remove `NeedsElevation`/`RestartElevatedCommand`/admin banner from UI
+- DI registration: check `CanWriteDataRoot` at startup, register `InProcessWriter` or `HelperProcessWriter`
+- Wire `PrepareInstallAsync` → build `WritePlanRequest` → `IElevatedWriter.ExecuteAsync` → manifest update
+- Call `CleanupInstallPlan(plan)` in a `finally` after execute
+- Handle `WriteResult.Success == false` gracefully (show `ErrorMessage` to user)
+
+
+
+**Bug:** `FileClassifier.Classify()` checked `modInfo.SkipFiles` and `modInfo.DisplayFiles` but not `modInfo.Files`. Files with unrecognized extensions that were explicitly mapped in `modinfo.Files` were returning `NoPathMatch` instead of `Install`.
+
+**Fix:** Added check 5b immediately after the MetaFile check and before the extension policy. If `modInfo?.Files.ContainsKey(zipPath)` is true → return `SkipCategory.Install` with `reason = null`.
+
+**Ordering principle:** `modinfo.json` explicit mappings must win over all extension-based policy. The position (post-MetaFile, pre-extension checks) ensures this while still letting `SkipFiles`/unsafe/artifact guards run first.
+
+**Test:** Removed `[Fact(Skip = "...")]` from `ModinfoFiles_ExplicitEntry_IsInstall_EvenIfExtensionWouldBeNoPathMatch` — it now passes as a normal `[Fact]`.
+
+**Test count:** 112 passed, 0 failed, 0 skipped.
+
 ### 2026-05-31: ZipHandling Skip Logic Implemented
 
 **What was built:**

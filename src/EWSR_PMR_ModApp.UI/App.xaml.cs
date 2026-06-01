@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using EWSR_PMR_ModApp.Core.Abstractions;
 using EWSR_PMR_ModApp.Core.Backup;
+using EWSR_PMR_ModApp.Core.Elevation;
 using EWSR_PMR_ModApp.Core.GameDetection;
 using EWSR_PMR_ModApp.Core.Manifest;
 using EWSR_PMR_ModApp.Core.SyncEngine;
@@ -33,7 +34,7 @@ public partial class App : Application
         var mainWindow = new MainWindow(mainVm);
         mainWindow.Show();
 
-        // Async init: locate game, check elevation, load manifest.
+        // Async init: locate game, load manifest.
         _ = mainVm.InitializeAsync();
     }
 
@@ -50,6 +51,16 @@ public partial class App : Application
         services.AddSingleton<IMappingResolver, MappingResolver>();
         services.AddSingleton<IBackupService,   BackupService>();
         services.AddSingleton<ISyncEngine,      SyncEngine>();
+
+        // ── Elevated writer factory ──────────────────────────────────────────
+        // Resolved at operation time so DataRoot changes (e.g. via Settings) are reflected.
+        services.AddSingleton<Func<string, IElevatedWriter>>(sp =>
+        {
+            var locator = sp.GetRequiredService<IGameLocator>();
+            return dataRoot => locator.CanWriteDataRoot(dataRoot)
+                ? (IElevatedWriter) new InProcessWriter()
+                : new HelperProcessWriter();
+        });
 
         // ── UI layer ─────────────────────────────────────────────────────────
         services.AddSingleton<UISettingsStore>();

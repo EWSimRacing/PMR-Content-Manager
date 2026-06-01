@@ -25,6 +25,66 @@ The orchestrator. Coordinates install, uninstall, and the key "re-apply" flow:
 - Normalize extracted paths so mods from different authors land in the right place.
 - Progress reporting for large archives.
 
+#### Skip Logic
+
+Not every file in a mod zip should be installed to the game directory. The engine classifies each zip entry into one of the following **skip categories**:
+
+| Category | Code | Description | Logged Message Template |
+|----------|------|-------------|------------------------|
+| **Install** | `Install` | File maps to a valid game data path and will be written. | (no log — normal flow) |
+| **DisplayOnly** | `DisplayOnly` | File is meant for user viewing, not installation (README, preview images). Surfaced in mod detail view. | `Display-only: {path} (reason: {type})` |
+| **NoPathMatch** | `NoPathMatch` | File doesn't map to any known location under `data/`. | `Skipped (no match in data): {path}` |
+| **MetaFile** | `MetaFile` | File is mod manager metadata (e.g., `modinfo.json` itself). | `Skipped (meta): {path}` |
+| **HashMatch** | `HashMatch` | File already exists at target with identical hash — no change needed. | `Skipped (unchanged): {path}` |
+| **UserExcluded** | `UserExcluded` | User explicitly blocked this file via exclusion list. | `Skipped (user exclusion): {path}` |
+| **AmbiguousPending** | `AmbiguousPending` | File location is ambiguous; held for user confirmation. | `Pending confirmation: {path}` |
+| **Collision** | `Collision` | Multiple zip entries resolve to same target — none installed. | `Collision: {path}` |
+| **UnsafeFile** | `UnsafeFile` | Executable or system file — never installed automatically. | `Blocked (unsafe): {path}` |
+
+##### Skip Policy by File Extension
+
+| Extension | Default Category | Rationale |
+|-----------|-----------------|-----------|
+| `.xml`, `.hadron`, `.tweakers`, `.i3d` | `Install` | Core PMR game data formats. |
+| `.dds` | `Install` | Texture files — primary mod content. |
+| `.png`, `.jpg`, `.jpeg` | Conditional | If path matches known game texture location → `Install`. If at zip root or in a folder named `preview`/`images`/`screenshots` → `DisplayOnly`. Otherwise → `NoPathMatch`. |
+| `.md`, `.txt` | `DisplayOnly` | Documentation files. Shown in mod detail view, never installed. |
+| `.pdf` | `DisplayOnly` | Documentation. |
+| `.json` | Conditional | If named `modinfo.json` at zip root → `MetaFile` (parsed, not installed). Otherwise → `Install` if path maps to data, else `NoPathMatch`. |
+| `.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.sh` | `UnsafeFile` | Never installed automatically. Mod manager will not execute arbitrary code. |
+| `.log`, `.bak`, `.tmp` | `NoPathMatch` | Packaging artifacts — always skipped. |
+| `.zip`, `.rar`, `.7z` | `NoPathMatch` | Nested archives — not unpacked recursively. |
+
+##### Processing Order
+
+1. **Integrity check** — reject corrupt/partial zips before any file analysis.
+2. **modinfo.json parse** — if present and valid, use its explicit file mappings.
+3. **Extension filter** — apply unsafe/meta/display-only rules.
+4. **Path mapping** — run hybrid strategy (path-overlay → filename-index fallback).
+5. **Hash comparison** — for files that map to existing game files, compare hashes.
+6. **User exclusion check** — apply any user-defined skip rules.
+7. **Collision detection** — flag multiple zip entries targeting same path.
+8. **Ambiguity resolution** — hold ambiguous mappings for user confirmation.
+
+##### Skip Reporting
+
+All skipped files are logged with their category and path. The engine returns:
+
+```csharp
+public record SkippedFile(string PathInZip, SkipCategory Category, string Reason);
+public record InstallResult(
+    bool Success,
+    IReadOnlyList<InstalledFile> Installed,
+    IReadOnlyList<SkippedFile> Skipped,
+    IReadOnlyList<string> Warnings
+);
+```
+
+The UI displays:
+- **During install:** "Installed X files, skipped Y files" with expandable detail list.
+- **Mod detail view:** Full file manifest showing status per entry (installed / display-only / skipped / pending).
+- **Log panel:** One line per skipped file with category and reason.
+
 ### 3. GameDetection (`Core/GameDetection/`)
 - Parse Steam's `libraryfolders.vdf` to find the Project Motor Racing install.
 - Fallback: check Windows Registry for Steam install path.
@@ -141,23 +201,122 @@ If the zip is flat (no meaningful folder structure), the engine indexes every fi
 
 This makes every install fully deterministic and reversible: uninstall restores originals by hash; re-apply compares `installedFileHash` against on-disk state.
 
-#### Future enhancement — `modinfo.json`
+#### `modinfo.json` Specification (v1)
 
-The app should accept (but never require) a small manifest inside the zip:
+The app accepts (but never requires) a manifest file named `modinfo.json` at the zip root. When present and valid, it is the **authoritative source** for file mappings — no heuristics run.
+
+##### Full Schema
 
 ```json
 {
-  "name": "My Livery Pack",
-  "author": "Someone",
-  "version": "1.0",
+  "$schema": "https://ewsr.dev/schemas/modinfo-v1.json",
+  "schemaVersion": 1,
+  "name": "EWSR PMR Realism Overhaul",
+  "version": "1.1.0",
+  "author": "Elliott Williams",
+  "description": "Comprehensive realism tweaks for Project Motor Racing.",
+  "website": "https://github.com/ElliottWilliams/EWSR_PMR_Tools",
+  "minGameVersion": "1.2.0",
+  "tags": ["realism", "physics", "AI", "weather"],
+  
   "files": {
-    "livery.dds": "vehicles/car_a/livery.dds",
-    "preview.png": "vehicles/car_a/preview.png"
-  }
+    "data/tracks/defs/environment/weather_overcast.xml": "install",
+    "data/ai/tweakers/ai_difficulty.tweakers": "install",
+    "data/vehicles/_shared/physics/hadron/Tire_AI/tire_grip.hadron": "install"
+  },
+  
+  "displayFiles": {
+    "README_PMR_Realism_Overhaul_v1.1.md": {
+      "label": "Readme",
+      "type": "readme"
+    },
+    "preview.jpg": {
+      "label": "Preview Image",
+      "type": "preview"
+    },
+    "CHANGELOG.md": {
+      "label": "Change Log",
+      "type": "changelog"
+    }
+  },
+  
+  "skipFiles": [
+    "*.bak",
+    "thumbs.db",
+    ".DS_Store",
+    "__MACOSX/*"
+  ],
+  
+  "dependencies": [
+    {
+      "modId": "ewsr-physics-base",
+      "minVersion": "1.0.0",
+      "optional": false
+    }
+  ]
 }
 ```
 
-When present, `modinfo.json` is treated as the authoritative mapping — no heuristics run. This removes all ambiguity for mod authors who opt in. The app works fully without it ("dumb zips just work").
+##### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | integer | Yes | Always `1` for this spec. Enables future migrations. |
+| `name` | string | Yes | Human-readable mod name (shown in UI). |
+| `version` | string | Yes | Semver-style version string. |
+| `author` | string | No | Mod author name. |
+| `description` | string | No | Short description (≤200 chars recommended). |
+| `website` | string | No | URL for mod homepage or repo. |
+| `minGameVersion` | string | No | Minimum PMR version required. Engine warns if game is older. |
+| `tags` | string[] | No | Categorization tags for future filtering. |
+| `files` | object | No | Map of `pathInZip` → `"install"` or target path override. If omitted, heuristics run. |
+| `displayFiles` | object | No | Files shown in UI but not installed. Keys are paths in zip. |
+| `skipFiles` | string[] | No | Glob patterns for files to skip entirely (not shown, not installed). |
+| `dependencies` | object[] | No | Other mods this mod requires. Engine warns if missing. |
+
+##### `files` Object Behavior
+
+- **Key:** Path of file within the zip (relative to zip root).
+- **Value:** 
+  - `"install"` — use path-overlay/heuristic for target location.
+  - A string path — explicit target path under `data/` (overrides heuristics).
+  - Omitting a file from `files` when `files` is present means that file uses heuristics.
+
+##### `displayFiles` Object
+
+Files listed here are extracted and made available for viewing in the mod detail UI, but are **never** copied to the game directory.
+
+| `type` Value | UI Treatment |
+|--------------|--------------|
+| `readme` | Rendered as markdown in a scrollable pane. |
+| `preview` | Shown as thumbnail in mod list; full-size in detail view. |
+| `changelog` | Shown in version history tab. |
+| `license` | Shown in legal/license tab. |
+| `other` | Generic "view" link in detail view. |
+
+##### `skipFiles` Patterns
+
+Glob patterns matching these rules are ignored entirely:
+- Not installed
+- Not shown in display files
+- Not counted in any totals
+- Logged with `Skipped (modinfo skip rule): {path}`
+
+Common patterns to include:
+```json
+"skipFiles": ["*.bak", "thumbs.db", ".DS_Store", "__MACOSX/*", "*.log"]
+```
+
+##### Validation Rules
+
+1. If `schemaVersion` is missing or > current supported version → warning, fall back to heuristics.
+2. If `name` or `version` missing → reject modinfo, fall back to heuristics with warning.
+3. If a `files` key path doesn't exist in the zip → warning (typo detection).
+4. If a `dependencies` entry is missing and `optional: false` → block install, show error.
+
+When present, `modinfo.json` is treated as the authoritative mapping — no heuristics run for files listed in `files`. Files not listed fall through to heuristic mapping. This removes all ambiguity for mod authors who opt in. The app works fully without it ("dumb zips just work").
+
+See also: [MOD_PACKAGING_GUIDE.md](./MOD_PACKAGING_GUIDE.md) for practical packaging instructions.
 
 #### GameDetection implications
 

@@ -44,3 +44,18 @@
 - **Integration:** Nux also fixed collision detection and warning message formatting (per Elliott's request for file-by-file transparency).
 - **Team status:** Policy design and implementation both complete; decision merged into `.squad/decisions.md`.
 - **Next owner:** Slit (UI updates for skip display in WarningsDialog and mod detail file list).
+
+### 2026-05-31T20:21:24-04:00: Elevation Broker Architecture Decision
+- **Problem:** WPF OLE drag-drop blocked by UIPI when app runs elevated. `ChangeWindowMessageFilterEx` only unblocks `WM_DROPFILES`, not the COM channel WPF uses. Elliott confirmed: works non-admin, fails as admin.
+- **Decision:** Non-elevated UI + elevated helper process.
+  - UI (`asInvoker`) handles all interactive work: drag-drop, staging, mapping, ambiguous prompts.
+  - Helper (`requireAdministrator`) is a short-lived console exe that executes a pre-validated write plan (backup → copy → delete).
+- **IPC:** Temp JSON request file passed as CLI arg → helper writes result to `{request}.result.json`. Simple, secure, testable. Progress streaming via newline-delimited JSON to stdout (optional).
+- **Security mitigations:**
+  1. Path validation: reject `..`, rooted paths, anything escaping DataRoot.
+  2. Source whitelist: only accept sources under `%APPDATA%\EWSR_PMR_ModApp\`.
+  3. Request file must be in user-protected temp/appdata directory.
+  4. Audit log to `helper.log`.
+- **Core refactor:** Split `SyncEngine.InstallAsync` into `PrepareInstallAsync` (pure) + `ExecuteInstallAsync` (writes). `IElevatedWriter` abstracts in-process vs. helper execution.
+- **Task decomposition:** Nux (Core DTOs, PathValidator, Helper.exe, SyncEngine split, IElevatedWriter); Slit (remove admin banner, wire broker, UAC-cancel UX); Wez (PathValidator tests, helper integration test).
+- **Deliverable:** `.squad/decisions/inbox/furiosa-elevation-broker-design.md`

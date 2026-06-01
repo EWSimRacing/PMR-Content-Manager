@@ -87,3 +87,37 @@ Test `ModinfoFiles_ExplicitEntry_IsInstall_EvenIfExtensionWouldBeNoPathMatch` is
 - Decision inbox merged to decisions.md
 - Production bug logged: `modInfo.Files` missing from FileClassifier.Classify check
 
+### Session: Phase 3 elevation-broker tests — W1–W4 (2026-05-31)
+
+**New test count: 52 added. Total suite: 164 (164 passed, 0 failed, 0 skipped).**
+
+**Files created:**
+```
+tests/EWSR_PMR_ModApp.Core.Tests/Elevation/
+  PathValidatorTests.cs    (W1 — 23 tests: 5 Theory + 18 Fact)
+  DtoSerializationTests.cs (W2 — 10 tests: 7 Fact + 3 Theory)
+  WritePlanExecutorTests.cs (W3 — 11 tests: real System.IO + InProcessWriter security)
+tests/EWSR_PMR_ModApp.Core.Tests/SyncEngine/
+  SyncEngineSplitTests.cs  (W4 — 8 tests: Prepare→Execute split via FakeFileSystem)
+```
+
+**W1 — PathValidator (security-critical):**
+`IsUnderDataRoot` tests cover: classic `..\..\Windows\System32\evil.dll` traversal, rooted absolute paths (`C:\Windows\`), sneaky traversal through subdirs (`vehicles\..\..\..`), forward-slash traversal, empty path, single-dot (resolves to root itself → false), trailing separator on dataRoot (edge case), case-insensitivity, and the sibling-prefix bypass (`data` vs `data_evil`). `IsAllowedSource` tests cover: source under staging subdir (accept), source directly in root (accept), Windows/System32 (reject), Desktop (reject), traversal escape (reject), empty string (reject), sibling-name prefix (reject), case-insensitivity (accept). All pure string manipulation — no real filesystem.
+
+**W2 — DTO serialization round-trip:**
+Uses `WriteIndented = true` options (matching Helper.Program). All nullable `IReadOnlyList<T>?` fields survive as null (not silently converted to empty lists). Enum `WritePlanOperation` round-trips as numeric value for all 3 cases. `WriteResult.Errors` (non-nullable default `[]`) survives as empty list. Covers `FileCopySpec` and `FileOperationError` standalone round-trips.
+
+**W3 — WritePlanExecutor integration (real System.IO):**
+`Directory.CreateTempSubdirectory` used for DataRoot and source dirs; cleaned up via `IDisposable TempScope`. Tests that touch `AppPaths.BackupDirForMod(modId)` (Install with backup, Uninstall) use unique GUID modIds and register the backup dir for cleanup. Covers: Install (no backup), Install (with backup — original backed up, mod file written), backup skip for new files (count=0), Uninstall (backup restored + new file deleted), Reapply (payload copied to DataRoot). InProcessWriter security tests cover: traversal target (`..\..\Windows\`), rooted absolute target (`C:\Windows\evil.dll`), source outside AppData, traversal in FilesToBackup, empty DataRoot, empty ModId — all rejected with `WriteResult.Success=false` before WritePlanExecutor is called.
+
+**W4 — SyncEngine split API:**
+All tests use FakeFileSystem + FakeFileHasher (no real disk I/O). Covers: `PrepareInstallAsync` → `InstallPlan` shape (FilesToCopy, FilesToBackup, MappedFiles, Warnings), warnings for unmatched entries in plan, `ExecuteInstallAsync` → file written to FakeFileSystem + modId consistent with manifest, `PrepareUninstallAsync` → `UninstallPlan` shape (BackedUpFileCount, NewFilesToDelete), `ExecuteUninstallAsync` → new file deleted from FakeFileSystem, `PrepareReapplyAsync` → `ReapplyPlan` with correct FilesToCopy for reverted mod, `PrepareReapplyAsync` + `ExecuteReapplyAsync` round-trip → file copied back to FakeFileSystem.
+
+**Nux code quality — no bugs found:** All Phase 1 code passed validation. One semantic note for documentation: `WritePlanExecutor.Execute` uses the `filesBackedUp` variable for the Uninstall operation to hold the restore count, so `WriteResult.FilesBackedUp` means "files restored" in the Uninstall context. The docs say "backed up before overwriting" which is only accurate for Install. No failing test written (behavior is correct, not a security/correctness risk); documented in W3 test comment for future reference.
+
+**Gaps for manual testing (cannot be automated without real elevation):**
+- `HelperProcessWriter.ExecuteAsync` end-to-end (spawns Helper.exe with `runas`/UAC prompt)
+- Helper.exe request-file-location whitelist (real `%TEMP%` vs arbitrary path)
+- Full round-trip from UI → Helper.exe → result file read-back with WriteIndented JSON
+- UAC cancel path (`Win32Exception` with `NativeErrorCode=1223`) in `HelperProcessWriter`
+

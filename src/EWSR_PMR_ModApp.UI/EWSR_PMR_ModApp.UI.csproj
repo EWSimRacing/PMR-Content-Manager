@@ -11,6 +11,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EWSR_PMR_ModApp.Core\EWSR_PMR_ModApp.Core.csproj" />
+    <!--
+      Copy Helper.exe alongside the UI executable.
+      ReferenceOutputAssembly="false" — do NOT link Core against Helper.
+      OutputItemType="Content" — treat the Helper's primary output as a Content item.
+      CopyToOutputDirectory — copy to UI's bin output so the UI can spawn it via AppContext.BaseDirectory.
+    -->
+    <ProjectReference Include="..\EWSR_PMR_ModApp.Helper\EWSR_PMR_ModApp.Helper.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Content">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

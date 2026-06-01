@@ -19,7 +19,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>   <!-- Toolbar -->
             <RowDefinition Height="*"/>    <!-- Main content -->
-            <RowDefinition Height="Auto"/> <!-- Elevation banner -->
             <RowDefinition Height="32"/>   <!-- Status bar -->
         </Grid.RowDefinitions>
 
@@ -315,40 +314,8 @@
             </Grid>
         </Grid>
 
-        <!-- ── Elevation banner ──────────────────────────────────────────── -->
-        <Border Grid.Row="2"
-                Background="#2A1A0A"
-                BorderBrush="{StaticResource WarningBrush}"
-                BorderThickness="0,1,0,0"
-                Padding="16,8"
-                Visibility="{Binding NeedsElevation,
-                    Converter={StaticResource BoolToVisConverter}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="⚠ "
-                               Foreground="{StaticResource WarningBrush}"
-                               FontSize="14"/>
-                    <TextBlock Foreground="{StaticResource WarningBrush}"
-                               VerticalAlignment="Center"
-                               Text="Admin rights required to write to the game's Program Files folder.  Install and uninstall are blocked until elevated."/>
-                </StackPanel>
-                <Button Grid.Column="1"
-                        Content="Restart as Administrator"
-                        Command="{Binding RestartElevatedCommand}"
-                        Background="#3E2510"
-                        Foreground="{StaticResource WarningBrush}"
-                        BorderBrush="#6E3A18"
-                        Padding="12,5"/>
-            </Grid>
-        </Border>
-
         <!-- ── Status bar ────────────────────────────────────────────────── -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="2"
                 Background="{StaticResource MantleBrush}"
                 BorderBrush="{StaticResource Surface0Brush}"
                 BorderThickness="0,1,0,0"

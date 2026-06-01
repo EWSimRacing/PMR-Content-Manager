@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using EWSR_PMR_ModApp.Core.Common;
+using EWSR_PMR_ModApp.Core.Elevation;
 using EWSR_PMR_ModApp.Core.GameDetection;
 using EWSR_PMR_ModApp.Core.Manifest;
 using EWSR_PMR_ModApp.Core.SyncEngine;
@@ -14,7 +14,7 @@ using Microsoft.Win32;
 namespace EWSR_PMR_ModApp.UI.ViewModels;
 
 /// <summary>
-/// Primary ViewModel — coordinates install, mod list, progress, and elevation state.
+/// Primary ViewModel — coordinates install, mod list, progress, and writer selection.
 /// </summary>
 public sealed class MainViewModel : ViewModelBase
 {
@@ -22,11 +22,13 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IManifestStore  _manifestStore;
     private readonly ISyncEngine     _syncEngine;
     private readonly UISettingsStore _settingsStore;
+    private readonly TimeProvider    _clock;
+    /// <summary>Resolves the correct writer at operation time based on DataRoot writability.</summary>
+    private readonly Func<string, IElevatedWriter> _writerFactory;
 
     private string?  _dataRoot;
     private bool     _isBusy;
     private bool     _isDragOver;
-    private bool     _needsElevation;
     private bool     _isSettingsVisible;
     private string   _statusText = "Ready";
     private int      _progressValue;
@@ -38,19 +40,22 @@ public sealed class MainViewModel : ViewModelBase
         IGameLocator    gameLocator,
         IManifestStore  manifestStore,
         ISyncEngine     syncEngine,
-        UISettingsStore settingsStore)
+        UISettingsStore settingsStore,
+        TimeProvider    clock,
+        Func<string, IElevatedWriter> writerFactory)
     {
         _gameLocator   = gameLocator;
         _manifestStore = manifestStore;
         _syncEngine    = syncEngine;
         _settingsStore = settingsStore;
+        _clock         = clock;
+        _writerFactory = writerFactory;
 
         Mods = new ObservableCollection<ModItemViewModel>();
 
-        BrowseCommand          = new AsyncRelayCommand(BrowseAsync,          () => !IsBusy);
-        ReapplyCommand         = new AsyncRelayCommand(ReapplyAsync,          () => !IsBusy);
-        RestartElevatedCommand = new RelayCommand(RestartElevated);
-        ToggleSettingsCommand  = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
+        BrowseCommand         = new AsyncRelayCommand(BrowseAsync,   () => !IsBusy);
+        ReapplyCommand        = new AsyncRelayCommand(ReapplyAsync,   () => !IsBusy);
+        ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -83,12 +88,6 @@ public sealed class MainViewModel : ViewModelBase
         set => SetField(ref _isDragOver, value);
     }
 
-    public bool NeedsElevation
-    {
-        get => _needsElevation;
-        private set => SetField(ref _needsElevation, value);
-    }
-
     public bool IsSettingsVisible
     {
         get => _isSettingsVisible;
@@ -118,10 +117,9 @@ public sealed class MainViewModel : ViewModelBase
     // Commands
     // ─────────────────────────────────────────────────────────────────────────
 
-    public AsyncRelayCommand BrowseCommand          { get; }
-    public AsyncRelayCommand ReapplyCommand         { get; }
-    public RelayCommand      RestartElevatedCommand { get; }
-    public RelayCommand      ToggleSettingsCommand  { get; }
+    public AsyncRelayCommand BrowseCommand         { get; }
+    public AsyncRelayCommand ReapplyCommand        { get; }
+    public RelayCommand      ToggleSettingsCommand { get; }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Initialization
@@ -137,17 +135,12 @@ public sealed class MainViewModel : ViewModelBase
         if (!locatorResult.Found)
         {
             SetStatus("Game not found — configure path in Settings.", 0);
-            NeedsElevation    = false;
             IsSettingsVisible = true;
             return;
         }
 
-        DataRoot       = locatorResult.DataRoot;
-        NeedsElevation = !_gameLocator.CanWriteDataRoot(DataRoot!);
-
-        SetStatus(NeedsElevation
-            ? "Admin rights required to install mods."
-            : "Ready — drop a .zip to install.", 0);
+        DataRoot = locatorResult.DataRoot;
+        SetStatus("Ready — drop a .zip to install.", 0);
 
         await RefreshModListAsync();
     }
@@ -155,12 +148,8 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>Called from SettingsViewModel when the user applies a new data root path.</summary>
     public async Task ApplyDataRootAsync(string newDataRoot)
     {
-        DataRoot       = newDataRoot;
-        NeedsElevation = !_gameLocator.CanWriteDataRoot(newDataRoot);
-
-        SetStatus(NeedsElevation
-            ? "Admin rights required."
-            : "Path updated — ready.", 0);
+        DataRoot = newDataRoot;
+        SetStatus("Path updated — ready.", 0);
 
         await RefreshModListAsync();
     }
@@ -203,16 +192,60 @@ public sealed class MainViewModel : ViewModelBase
                 SetStatus($"Installing {modName}…", 0);
 
                 var progress = MakeProgress();
-
-                InstallResult result;
+                InstallPlan? plan = null;
                 try
                 {
-                    result = await _syncEngine.InstallAsync(
+                    // Step 1: pure prepare — validates zip, stages, resolves mappings.
+                    plan = await _syncEngine.PrepareInstallAsync(
                         zipPath,
                         DataRoot,
                         modName,
                         confirmAmbiguous: ResolveAmbiguousMappingsAsync,
                         progress: progress);
+
+                    // Step 2: execute file writes via the appropriate writer.
+                    var request = new WritePlanRequest
+                    {
+                        Operation     = WritePlanOperation.Install,
+                        DataRoot      = plan.DataRoot,
+                        ModId         = plan.ModId,
+                        FilesToCopy   = plan.FilesToCopy,
+                        FilesToBackup = plan.FilesToBackup
+                    };
+
+                    var writer      = _writerFactory(DataRoot);
+                    var writeResult = await writer.ExecuteAsync(request);
+
+                    if (!writeResult.Success)
+                    {
+                        ShowWriteFailure(writeResult, "Install", modName);
+                        continue;
+                    }
+
+                    // Step 3: cache payload to AppData so reapply-after-update works.
+                    SetStatus($"Caching {modName} payload…", 85);
+                    CachePayload(plan);
+
+                    // Step 4: update manifest (AppData — no elevation needed).
+                    SetStatus("Updating manifest…", 90);
+                    var modEntry  = BuildModEntry(plan);
+                    var conflicts = await _manifestStore.DetectConflictsAsync(modEntry);
+                    var warnings  = plan.Warnings.ToList();
+                    foreach (var (existingId, _, path) in conflicts)
+                        warnings.Add($"File '{path}' is also owned by mod '{existingId}' — last-write wins.");
+                    await _manifestStore.AddOrUpdateModAsync(modEntry);
+
+                    // Surface warnings/collisions prominently.
+                    if (warnings.Count > 0)
+                    {
+                        var warningsDlg = new WarningsDialog(modName, warnings)
+                        {
+                            Owner = Application.Current.MainWindow
+                        };
+                        warningsDlg.ShowDialog();
+                    }
+
+                    SetStatus($"Installed {writeResult.FilesCopied} file(s) from {modName}.", 100);
                 }
                 catch (OperationCanceledException)
                 {
@@ -229,29 +262,11 @@ public sealed class MainViewModel : ViewModelBase
                     SetStatus($"Error installing {modName}.", 0);
                     continue;
                 }
-
-                if (!result.Success)
+                finally
                 {
-                    MessageBox.Show(
-                        $"Failed to install {modName}:\n\n{result.ErrorMessage}",
-                        "Install Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                    SetStatus($"Install failed: {result.ErrorMessage}", 0);
-                    continue;
+                    if (plan is not null)
+                        _syncEngine.CleanupInstallPlan(plan);
                 }
-
-                // Surface warnings/collisions prominently.
-                if (result.Warnings.Count > 0)
-                {
-                    var warningsDlg = new WarningsDialog(modName, result.Warnings)
-                    {
-                        Owner = Application.Current.MainWindow
-                    };
-                    warningsDlg.ShowDialog();
-                }
-
-                SetStatus($"Installed {result.FilesInstalled} file(s) from {modName}.", 100);
             }
         }
         finally
@@ -279,24 +294,44 @@ public sealed class MainViewModel : ViewModelBase
         try
         {
             SetStatus($"Uninstalling {modName}…", 0);
-            var progress = MakeProgress();
 
-            var result = await _syncEngine.UninstallAsync(
-                modId, DataRoot ?? string.Empty, progress);
+            UninstallPlan plan;
+            try
+            {
+                plan = await _syncEngine.PrepareUninstallAsync(modId, DataRoot ?? string.Empty);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                MessageBox.Show($"Cannot uninstall: {ex.Message}", "Uninstall Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus("Uninstall failed.", 0);
+                return;
+            }
 
-            if (!result.Success)
+            var request = new WritePlanRequest
             {
-                MessageBox.Show(
-                    $"Uninstall failed:\n\n{result.ErrorMessage}",
-                    "Uninstall Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                SetStatus($"Uninstall failed: {result.ErrorMessage}", 0);
-            }
-            else
+                Operation     = WritePlanOperation.Uninstall,
+                DataRoot      = plan.DataRoot,
+                ModId         = plan.ModId,
+                FilesToDelete = plan.NewFilesToDelete
+            };
+
+            var writer      = _writerFactory(plan.DataRoot);
+            var writeResult = await writer.ExecuteAsync(request);
+
+            if (!writeResult.Success)
             {
-                SetStatus($"Uninstalled {modName} — {result.FilesRestored} file(s) restored.", 100);
+                ShowWriteFailure(writeResult, "Uninstall", modName);
+                return;
             }
+
+            // Clean up backup directory (AppData — no elevation needed).
+            TryDeleteDirectory(AppPaths.BackupDirForMod(plan.ModId));
+
+            // Remove from manifest.
+            await _manifestStore.RemoveModAsync(plan.ModId);
+
+            SetStatus($"Uninstalled {modName} — {writeResult.FilesBackedUp} file(s) restored.", 100);
         }
         catch (Exception ex)
         {
@@ -331,12 +366,9 @@ public sealed class MainViewModel : ViewModelBase
         try
         {
             SetStatus("Checking for reverted mods…", 0);
-            var statuses = await _syncEngine.CheckForRevertedModsAsync(DataRoot);
+            var plan = await _syncEngine.PrepareReapplyAsync(DataRoot);
 
-            int revertedCount = statuses.Count(s =>
-                s.State == Core.SyncEngine.ModRevertState.Reverted);
-
-            if (revertedCount == 0)
+            if (plan.ModsToReapply.Count == 0)
             {
                 SetStatus("All mods intact — nothing to reapply.", 0);
                 MessageBox.Show("All mods are intact. No files have been reverted.",
@@ -344,20 +376,44 @@ public sealed class MainViewModel : ViewModelBase
                 return;
             }
 
-            SetStatus($"Reapplying {revertedCount} reverted mod(s)…", 0);
-            var progress = MakeProgress();
-            var result   = await _syncEngine.ReapplyRevertedModsAsync(DataRoot, progress);
+            SetStatus($"Reapplying {plan.ModsToReapply.Count} mod(s)…", 0);
 
-            if (result.Errors.Count > 0)
+            // Batch all mods into a single write request — one UAC prompt total.
+            var allFiles = plan.ModsToReapply
+                .SelectMany(m => m.FilesToCopy)
+                .ToList();
+
+            var request = new WritePlanRequest
             {
-                var warningsDlg = new WarningsDialog("Reapply", result.Errors)
+                Operation   = WritePlanOperation.Reapply,
+                DataRoot    = plan.DataRoot,
+                ModId       = "reapply",
+                FilesToCopy = allFiles
+            };
+
+            var writer      = _writerFactory(plan.DataRoot);
+            var writeResult = await writer.ExecuteAsync(request);
+
+            if (!writeResult.Success)
+            {
+                ShowWriteFailure(writeResult, "Reapply", null);
+                return;
+            }
+
+            var errors = writeResult.Errors
+                .Select(e => $"'{e.RelativePath}': {e.Message}")
+                .ToList();
+
+            if (errors.Count > 0)
+            {
+                var warningsDlg = new WarningsDialog("Reapply", errors)
                 {
                     Owner = Application.Current.MainWindow
                 };
                 warningsDlg.ShowDialog();
             }
 
-            SetStatus($"Reapplied {result.FilesReapplied} file(s) across {result.ModsReapplied} mod(s).", 100);
+            SetStatus($"Reapplied {writeResult.FilesCopied} file(s) across {plan.ModsToReapply.Count} mod(s).", 100);
         }
         catch (Exception ex)
         {
@@ -368,32 +424,6 @@ public sealed class MainViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Elevation
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void RestartElevated()
-    {
-        var executablePath = Environment.ProcessPath
-            ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
-
-        var psi = new ProcessStartInfo(executablePath)
-        {
-            Verb            = "runas",
-            UseShellExecute = true
-        };
-
-        try
-        {
-            Process.Start(psi);
-            Application.Current.Shutdown();
-        }
-        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
-        {
-            // Error 1223 = The operation was cancelled by the user (UAC dialog dismissed).
         }
     }
 
@@ -414,6 +444,66 @@ public sealed class MainViewModel : ViewModelBase
             dialog.ShowDialog();
             return dialog.GetResolutions();
         }).Task;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Install post-write helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Caches staged mod files to AppData payload directory so reapply-after-update works.</summary>
+    private static void CachePayload(InstallPlan plan)
+    {
+        string payloadDir = AppPaths.PayloadDirForMod(plan.ModId);
+        Directory.CreateDirectory(payloadDir);
+        foreach (var mapping in plan.MappedFiles)
+        {
+            string dest = Path.Combine(
+                payloadDir,
+                mapping.ZipEntry.FullNameInZip.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(mapping.ZipEntry.StagedFilePath, dest, overwrite: true);
+        }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="ModEntry"/> from the install plan.
+    /// Hashes are read from staged sources (same bytes as the installed files).
+    /// Original hashes are recovered from the backup directory when available.
+    /// </summary>
+    private ModEntry BuildModEntry(InstallPlan plan)
+    {
+        string backupDir       = AppPaths.BackupDirForMod(plan.ModId);
+        var    installedFiles  = new List<InstalledFileEntry>();
+
+        foreach (var mapping in plan.MappedFiles)
+        {
+            string backupPath = Path.Combine(
+                backupDir,
+                mapping.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+
+            bool    isNew         = !File.Exists(backupPath);
+            string? originalHash  = isNew ? null : HashHelper.ComputeFileHash(backupPath);
+            string  installedHash = HashHelper.ComputeFileHash(mapping.ZipEntry.StagedFilePath);
+
+            installedFiles.Add(new InstalledFileEntry
+            {
+                RelativeTargetPath = mapping.RelativeTargetPath,
+                SourcePathInZip    = mapping.ZipEntry.FullNameInZip,
+                MappingMethod      = mapping.MappingMethod,
+                OriginalFileHash   = originalHash,
+                InstalledFileHash  = installedHash,
+                IsNewFile          = isNew
+            });
+        }
+
+        return new ModEntry
+        {
+            ModId            = plan.ModId,
+            ModName          = plan.ModName,
+            SourceZipHash    = plan.ZipHash,
+            InstallTimestamp = _clock.GetUtcNow(),
+            Files            = installedFiles
+        };
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -455,5 +545,33 @@ public sealed class MainViewModel : ViewModelBase
     {
         StatusText    = text;
         ProgressValue = percent;
+    }
+
+    /// <summary>
+    /// Shows a user-friendly error for a failed <see cref="WriteResult"/>.
+    /// Distinguishes UAC cancellation from other failures.
+    /// </summary>
+    private void ShowWriteFailure(WriteResult result, string operation, string? modName)
+    {
+        bool cancelled = result.ErrorMessage == "Elevation cancelled by user.";
+        string title   = cancelled ? $"{operation} Cancelled" : $"{operation} Failed";
+        string msg     = cancelled
+            ? $"{operation} cancelled — administrator permission was declined."
+            : modName is not null
+                ? $"Failed to {operation.ToLowerInvariant()} {modName}:\n\n{result.ErrorMessage}"
+                : $"{operation} failed:\n\n{result.ErrorMessage}";
+
+        MessageBox.Show(msg, title, MessageBoxButton.OK,
+            cancelled ? MessageBoxImage.Warning : MessageBoxImage.Error);
+
+        SetStatus(cancelled
+            ? $"{operation} cancelled."
+            : $"{operation} failed: {result.ErrorMessage}", 0);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        catch { /* Best-effort cleanup — do not throw. */ }
     }
 }

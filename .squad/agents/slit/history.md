@@ -191,5 +191,72 @@ All diagnostic logging gated behind `#if DEBUG` in `MainWindow.xaml.cs`:
 - Diagnostic logging to `%TEMP%` on every drag event is invaluable for remote debugging. Gate it behind `#if DEBUG` so it never ships.
 
 
-Nux refactored SyncEngine to emit one warning entry per skipped/colliding file instead of aggregated counts. No UI changes needed — WarningsDialog already renders each warning string as its own row.
+### 2026-05-31T20:40:00-04:00: Phase 2 — Elevation Broker Wiring (S1–S5)
+
+#### Summary
+
+Wired the UI through the non-elevated-UI + elevated-helper architecture that Nux built in Phase 1 (Core). All install, uninstall, and reapply operations now go through the `Prepare → WritePlanRequest → IElevatedWriter → manifest` orchestration.
+
+#### Flow implemented
+
+**Install (S3):**
+1. `ISyncEngine.PrepareInstallAsync(...)` — validates zip, stages, resolves mappings, shows ambiguity dialog. Returns `InstallPlan`.
+2. Build `WritePlanRequest { Operation=Install, DataRoot, ModId, FilesToCopy, FilesToBackup }` from the plan.
+3. Resolve `IElevatedWriter` via factory `_writerFactory(DataRoot)` (see S2).
+4. `writer.ExecuteAsync(request, ct)` — does backup + file copy (in-process or via elevated Helper.exe).
+5. If `WriteResult.Success`: call `CachePayload(plan)` (copies staged files → AppData payload dir) then `BuildModEntry(plan)` (computes hashes from staged files + backup dir) then `_manifestStore.AddOrUpdateModAsync`.
+6. `CleanupInstallPlan(plan)` in `finally` — removes staging dir regardless of outcome.
+
+**Uninstall (S5):**
+1. `PrepareUninstallAsync(modId, dataRoot)` → `UninstallPlan`.
+2. Build `WritePlanRequest { Operation=Uninstall, FilesToDelete=plan.NewFilesToDelete }`.
+3. `writer.ExecuteAsync` — restores backups from AppData backup dir → DataRoot, deletes new files from DataRoot.
+4. If success: `Directory.Delete(AppPaths.BackupDirForMod(modId))` then `_manifestStore.RemoveModAsync`.
+
+**Reapply (S5):**
+1. `PrepareReapplyAsync(dataRoot)` → `ReapplyPlan` (already checks for reverted mods internally).
+2. If `plan.ModsToReapply.Count == 0`, bail early with "nothing to reapply" message.
+3. Flatten all mods' `FilesToCopy` into one `WritePlanRequest { Operation=Reapply }` — one UAC prompt total.
+4. `writer.ExecuteAsync` — copies payload cache files → DataRoot.
+5. No manifest update needed for reapply (manifest already records correct hashes).
+
+#### Writer selection (S2)
+
+`Func<string, IElevatedWriter>` registered as a singleton in DI. Evaluated at operation time (not startup) so DataRoot changes (Settings panel) are reflected immediately:
+
+```csharp
+services.AddSingleton<Func<string, IElevatedWriter>>(sp => {
+    var locator = sp.GetRequiredService<IGameLocator>();
+    return dataRoot => locator.CanWriteDataRoot(dataRoot)
+        ? (IElevatedWriter) new InProcessWriter()
+        : new HelperProcessWriter();
+});
+```
+
+`InProcessWriter` is used when the game directory is writable (dev machine, non-Program-Files install). `HelperProcessWriter` is used when elevation is needed (Program Files) — it spawns `EWSR_PMR_ModApp.Helper.exe` with `runas`, writes a temp JSON request file, awaits exit, reads the result file.
+
+#### Manifest write (S3)
+
+`ExecuteInstallAsync` (SyncEngine in-process path) is no longer called from the UI. Instead, the UI orchestration always calls the writer directly and then updates the manifest itself. This means:
+
+- **Both in-process and helper paths** end with an identical manifest update from the UI.
+- No double-write. `ExecuteInstallAsync` is only used by the thin-wrapper `InstallAsync` which is no longer called by the UI.
+- `InstalledFileHash` is computed from the staged source file (same bytes as installed). `OriginalFileHash` is computed from the backup file if it exists (null = new file).
+
+#### UAC cancel UX (S4)
+
+`HelperProcessWriter` returns `WriteResult { Success=false, ErrorMessage="Elevation cancelled by user." }` on Win32 error 1223. `ShowWriteFailure()` detects this string and shows a `MessageBoxImage.Warning` (not error) with the message "Install/Uninstall/Reapply cancelled — administrator permission was declined." `IsBusy` is always released in `finally` — no stuck spinner.
+
+#### S1 — Elevation flow removed
+
+- `NeedsElevation` property, `RestartElevatedCommand`, `RestartElevated()`, and related status text removed from `MainViewModel`.
+- Elevation banner (Grid.Row="2", ~30 lines of XAML) removed from `MainWindow.xaml`. Grid row count reduced from 4 to 3; status bar moved from Grid.Row="3" to Grid.Row="2".
+- `app.manifest` remains `asInvoker` — unchanged. The UI never elevates itself.
+- `ChangeWindowMessageFilterEx` calls in `MainWindow.xaml.cs` retained (harmless, correct for completeness).
+
+#### Build / test result
+
+- `dotnet build` → 0 errors, 0 warnings.
+- `dotnet test` → 112/112 passed (Core tests unchanged; no UI tests exist).
+
 

@@ -14,4 +14,10 @@ public sealed class ZipStagingResult
 
     /// <summary>SHA-256 hash of the original zip file.</summary>
     public required string ZipHash { get; init; }
+
+    /// <summary>Files classified as display-only (README, preview images).</summary>
+    public IReadOnlyList<ZipEntryInfo> DisplayFiles { get; init; } = [];
+
+    /// <summary>Files that were skipped with their reason.</summary>
+    public IReadOnlyList<SkippedFile> SkippedFiles { get; init; } = [];
 }

@@ -102,10 +102,38 @@ public sealed class ZipService : IZipService
             }
         }, ct).ConfigureAwait(false);
 
+        // Classify each entry using FileClassifier.
+        var installEntries = new List<ZipEntryInfo>();
+        var displayFiles   = new List<ZipEntryInfo>();
+        var skippedFiles   = new List<SkippedFile>();
+
+        foreach (var e in entries)
+        {
+            var category = FileClassifier.Classify(e, modInfo, out var reason);
+            e.Category   = category;
+            e.SkipReason = reason;
+
+            switch (category)
+            {
+                case SkipCategory.Install:
+                case SkipCategory.AmbiguousPending:
+                    installEntries.Add(e);
+                    break;
+                case SkipCategory.DisplayOnly:
+                    displayFiles.Add(e);
+                    break;
+                default:
+                    skippedFiles.Add(new SkippedFile(e.FullNameInZip, category, reason ?? string.Empty));
+                    break;
+            }
+        }
+
         return new ZipStagingResult
         {
             StagingDirectory = stagingDir,
-            Entries          = entries,
+            Entries          = installEntries,
+            DisplayFiles     = displayFiles,
+            SkippedFiles     = skippedFiles,
             ModInfo          = modInfo,
             ZipHash          = zipHash
         };

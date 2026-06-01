@@ -19,4 +19,10 @@ public sealed class ZipEntryInfo
 
     /// <summary>Uncompressed size in bytes.</summary>
     public long UncompressedSize { get; init; }
+
+    /// <summary>Classification assigned by <see cref="FileClassifier"/>.</summary>
+    public SkipCategory Category { get; set; } = SkipCategory.Install;
+
+    /// <summary>Human-readable reason when <see cref="Category"/> != <see cref="SkipCategory.Install"/>.</summary>
+    public string? SkipReason { get; set; }
 }
