@@ -178,19 +178,22 @@
 
                         <StackPanel HorizontalAlignment="Center"
                                     VerticalAlignment="Center">
+                            <!-- IsHitTestVisible="False" on decorative elements so they
+                                 cannot intercept drag events; only the Button stays interactive. -->
                             <TextBlock FontSize="52"
                                        HorizontalAlignment="Center"
                                        Foreground="{StaticResource SubtextBrush}"
-                                       Margin="0,0,0,12">
+                                       Margin="0,0,0,12"
+                                       IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                                        <Setter Property="Text" Value="⬇"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsDragOver}" Value="True">
-                                                <Setter Property="Text"       Value="⬇"/>
-                                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
+                            <Setter Property="Text" Value="⬇"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                        <Setter Property="Text"       Value="⬇"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
@@ -198,16 +201,17 @@
                             <TextBlock FontSize="19"
                                        FontWeight="SemiBold"
                                        HorizontalAlignment="Center"
-                                       Margin="0,0,0,6">
+                                       Margin="0,0,0,6"
+                                       IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                                        <Setter Property="Text" Value="Drop a mod .zip here"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsDragOver}" Value="True">
-                                                <Setter Property="Text"       Value="Release to install"/>
-                                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
+                            <Setter Property="Text" Value="Drop a mod .zip here"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                        <Setter Property="Text"       Value="Release to install"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
@@ -216,7 +220,8 @@
                                        FontSize="12"
                                        HorizontalAlignment="Center"
                                        Foreground="{StaticResource SubtextBrush}"
-                                       Margin="0,0,0,12"/>
+                                       Margin="0,0,0,12"
+                                       IsHitTestVisible="False"/>
 
                             <Button Content="Browse for .zip…"
                                     Style="{StaticResource AccentButton}"
@@ -228,7 +233,8 @@
                                        FontSize="11"
                                        HorizontalAlignment="Center"
                                        Foreground="{StaticResource SubtextBrush}"
-                                       Margin="0,16,0,0"/>
+                                       Margin="0,16,0,0"
+                                       IsHitTestVisible="False"/>
                         </StackPanel>
                     </Border>
                 </Grid>
