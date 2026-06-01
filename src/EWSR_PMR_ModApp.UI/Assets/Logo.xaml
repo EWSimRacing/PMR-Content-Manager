@@ -2,122 +2,150 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        PMR Content Manager logo — Motorsport badge inspired by Content Manager aesthetics.
-        Design: Circular badge with stylized speedometer gauge and racing chevrons.
-          • Outer ring: Surface0Brush (#313244) to #45475a gradient — racing-badge border
-          • Inner disc: MantleBrush (#181825) to #1e1e2e gradient — dark background
-          • Gauge arc + needle + ticks: AccentBrush (#89B4FA) — motorsport dashboard feel
-          • Racing chevrons at bottom: AccentBrush — speed/motion indicator
-        ViewBox 64×64.  Reads cleanly at 16–48 px.
-        SVG source of truth: Assets/logo.svg
-        
-        Inspiration: Content Manager's circular badge, gauge/speedometer motif,
-        clean motorsport aesthetic — original design for PMR Content Manager.
+        PMR / CM stacked wordmark — Elliott's own artwork translated to WPF DrawingImage.
+        Source of truth: Assets/logo.svg  (1200×800 viewBox, transparent background).
+        Colors: asphalt black #050505 · pit-wall white #FFFFFF · brass gold #B99A5D.
+
+        Rendering technique (matches the SVG's layered multi-pass stroke approach):
+          Layer 1 — gold glow: thick #B99A5D stroke (36 px) at outer translate offset
+          Layer 2a — white outline: thick #FFFFFF stroke (44 px) at mid translate offset
+          Layer 2b — black fill: #050505 fill + 4 px #050505 stroke at same mid offset
+          Layer 3 — gold hairline: 8 px #B99A5D stroke (opacity 0.95) at inner offset
+
+        Each SVG <g transform="translate(tx,ty) scale(1,-1)"> becomes a DrawingGroup
+        with <MatrixTransform Matrix="1,0,0,-1,tx,ty"/> (flip y-axis, then translate).
+
+        The soft-edge drop shadow filter (stdDeviation=0.4, opacity=0.20) is omitted —
+        it is imperceptible at UI scale and has no WPF DrawingImage equivalent.
+
+        ViewBox / aspect ratio: 1200×800 (3:2).  Toolbar <Image> uses Stretch="Uniform"
+        so the wordmark scales proportionally at any display size.
     -->
+
     <DrawingImage x:Key="LogoDrawingImage">
         <DrawingImage.Drawing>
             <DrawingGroup>
+                <!-- Lock bounding box to 1200×800 so WPF honours the 3:2 aspect ratio. -->
+                <DrawingGroup.ClipGeometry>
+                    <RectangleGeometry Rect="0,0,1200,800"/>
+                </DrawingGroup.ClipGeometry>
 
-                <!-- Outer ring (badge border) with gradient -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Brush>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                            <GradientStop Color="#45475a" Offset="0"/>
-                            <GradientStop Color="#313244" Offset="1"/>
-                        </LinearGradientBrush>
-                    </GeometryDrawing.Brush>
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="32,32" RadiusX="30" RadiusY="30"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- ═══════════ PMR ROW ═══════════ -->
 
-                <!-- Inner disc (dark background) with gradient -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Brush>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                            <GradientStop Color="#1e1e2e" Offset="0"/>
-                            <GradientStop Color="#11111b" Offset="1"/>
-                        </LinearGradientBrush>
-                    </GeometryDrawing.Brush>
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="32,32" RadiusX="26" RadiusY="26"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- PMR — Layer 1: gold outer glow  translate(216.40, 350.00) scale(1,-1) -->
+                <DrawingGroup>
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,216.40,350.00"/>
+                    </DrawingGroup.Transform>
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFB99A5D" Thickness="36" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M53.83,240.59 L156.80,240.59 Q194.65,240.59 216.00,223.27 Q237.34,205.94 237.34,175.16 Q237.34,156.29 230.23,139.27 Q223.16,122.31 209.96,109.57 Q195.63,95.85 175.78,89.67 Q155.98,83.48 126.02,83.48 L85.08,83.48 L68.99,0.00 L6.91,0.00 L53.83,240.59 Z M107.30,195.63 L94.10,128.44 L128.44,128.44 Q150.36,128.44 161.96,138.75 Q173.56,149.07 173.56,168.71 Q173.56,181.76 165.26,188.67 Q156.96,195.63 141.33,195.63 L107.30,195.63 Z M295.69,240.59 L371.90,240.59 L402.84,112.82 L484.05,240.59 L563.30,240.59 L516.43,0.00 L457.60,0.00 L491.94,177.58 L408.46,46.25 L375.10,46.25 L341.94,177.58 L307.60,0.00 L248.77,0.00 L295.69,240.59 Z M691.42,133.91 Q712.51,133.91 723.39,143.70 Q734.27,153.55 734.27,172.58 Q734.27,184.49 726.79,190.06 Q719.32,195.63 703.18,195.63 L677.55,195.63 L665.33,133.91 L691.42,133.91 Z M657.08,91.06 L639.24,0.00 L577.16,0.00 L624.08,240.59 L715.76,240.59 Q755.41,240.59 775.83,225.74 Q796.30,210.94 796.30,182.07 Q796.30,152.93 780.16,134.06 Q764.07,115.19 736.54,112.46 Q749.12,109.88 757.47,99.62 Q765.88,89.41 772.17,68.32 L792.64,0.00 L730.92,0.00 L712.87,59.76 Q707.35,77.65 699.52,84.36 Q691.73,91.06 676.93,91.06 L657.08,91.06 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
-                <!-- Gauge arc (speedometer — 180° arc at top) -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Pen>
-                        <Pen Brush="#89B4FA" Thickness="3" StartLineCap="Round" EndLineCap="Round"/>
-                    </GeometryDrawing.Pen>
-                    <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M14,36 A20,20 0 0 1 50,36"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- PMR — Layer 2: white outline + black fill  translate(198.40, 330.00) scale(1,-1) -->
+                <DrawingGroup>
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,198.40,330.00"/>
+                    </DrawingGroup.Transform>
+                    <!-- 2a: white thick outline -->
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFFFFFFF" Thickness="44" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M53.83,240.59 L156.80,240.59 Q194.65,240.59 216.00,223.27 Q237.34,205.94 237.34,175.16 Q237.34,156.29 230.23,139.27 Q223.16,122.31 209.96,109.57 Q195.63,95.85 175.78,89.67 Q155.98,83.48 126.02,83.48 L85.08,83.48 L68.99,0.00 L6.91,0.00 L53.83,240.59 Z M107.30,195.63 L94.10,128.44 L128.44,128.44 Q150.36,128.44 161.96,138.75 Q173.56,149.07 173.56,168.71 Q173.56,181.76 165.26,188.67 Q156.96,195.63 141.33,195.63 L107.30,195.63 Z M295.69,240.59 L371.90,240.59 L402.84,112.82 L484.05,240.59 L563.30,240.59 L516.43,0.00 L457.60,0.00 L491.94,177.58 L408.46,46.25 L375.10,46.25 L341.94,177.58 L307.60,0.00 L248.77,0.00 L295.69,240.59 Z M691.42,133.91 Q712.51,133.91 723.39,143.70 Q734.27,153.55 734.27,172.58 Q734.27,184.49 726.79,190.06 Q719.32,195.63 703.18,195.63 L677.55,195.63 L665.33,133.91 L691.42,133.91 Z M657.08,91.06 L639.24,0.00 L577.16,0.00 L624.08,240.59 L715.76,240.59 Q755.41,240.59 775.83,225.74 Q796.30,210.94 796.30,182.07 Q796.30,152.93 780.16,134.06 Q764.07,115.19 736.54,112.46 Q749.12,109.88 757.47,99.62 Q765.88,89.41 772.17,68.32 L792.64,0.00 L730.92,0.00 L712.87,59.76 Q707.35,77.65 699.52,84.36 Q691.73,91.06 676.93,91.06 L657.08,91.06 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- 2b: black fill + thin black stroke (the letter body) -->
+                    <GeometryDrawing Brush="#FF050505">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FF050505" Thickness="4" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M53.83,240.59 L156.80,240.59 Q194.65,240.59 216.00,223.27 Q237.34,205.94 237.34,175.16 Q237.34,156.29 230.23,139.27 Q223.16,122.31 209.96,109.57 Q195.63,95.85 175.78,89.67 Q155.98,83.48 126.02,83.48 L85.08,83.48 L68.99,0.00 L6.91,0.00 L53.83,240.59 Z M107.30,195.63 L94.10,128.44 L128.44,128.44 Q150.36,128.44 161.96,138.75 Q173.56,149.07 173.56,168.71 Q173.56,181.76 165.26,188.67 Q156.96,195.63 141.33,195.63 L107.30,195.63 Z M295.69,240.59 L371.90,240.59 L402.84,112.82 L484.05,240.59 L563.30,240.59 L516.43,0.00 L457.60,0.00 L491.94,177.58 L408.46,46.25 L375.10,46.25 L341.94,177.58 L307.60,0.00 L248.77,0.00 L295.69,240.59 Z M691.42,133.91 Q712.51,133.91 723.39,143.70 Q734.27,153.55 734.27,172.58 Q734.27,184.49 726.79,190.06 Q719.32,195.63 703.18,195.63 L677.55,195.63 L665.33,133.91 L691.42,133.91 Z M657.08,91.06 L639.24,0.00 L577.16,0.00 L624.08,240.59 L715.76,240.59 Q755.41,240.59 775.83,225.74 Q796.30,210.94 796.30,182.07 Q796.30,152.93 780.16,134.06 Q764.07,115.19 736.54,112.46 Q749.12,109.88 757.47,99.62 Q765.88,89.41 772.17,68.32 L792.64,0.00 L730.92,0.00 L712.87,59.76 Q707.35,77.65 699.52,84.36 Q691.73,91.06 676.93,91.06 L657.08,91.06 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
-                <!-- Gauge tick marks (semi-transparent) -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Pen>
-                        <Pen Brush="#7089B4FA" Thickness="2" StartLineCap="Round" EndLineCap="Round"/>
-                    </GeometryDrawing.Pen>
-                    <GeometryDrawing.Geometry>
-                        <GeometryGroup>
-                            <LineGeometry StartPoint="14,36" EndPoint="17,34"/>
-                            <LineGeometry StartPoint="19,23" EndPoint="22,25"/>
-                            <LineGeometry StartPoint="32,16" EndPoint="32,20"/>
-                            <LineGeometry StartPoint="45,23" EndPoint="42,25"/>
-                            <LineGeometry StartPoint="50,36" EndPoint="47,34"/>
-                        </GeometryGroup>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- PMR — Layer 3: gold hairline, opacity 0.95  translate(205.40, 338.00) scale(1,-1) -->
+                <DrawingGroup Opacity="0.95">
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,205.40,338.00"/>
+                    </DrawingGroup.Transform>
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFB99A5D" Thickness="8" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M53.83,240.59 L156.80,240.59 Q194.65,240.59 216.00,223.27 Q237.34,205.94 237.34,175.16 Q237.34,156.29 230.23,139.27 Q223.16,122.31 209.96,109.57 Q195.63,95.85 175.78,89.67 Q155.98,83.48 126.02,83.48 L85.08,83.48 L68.99,0.00 L6.91,0.00 L53.83,240.59 Z M107.30,195.63 L94.10,128.44 L128.44,128.44 Q150.36,128.44 161.96,138.75 Q173.56,149.07 173.56,168.71 Q173.56,181.76 165.26,188.67 Q156.96,195.63 141.33,195.63 L107.30,195.63 Z M295.69,240.59 L371.90,240.59 L402.84,112.82 L484.05,240.59 L563.30,240.59 L516.43,0.00 L457.60,0.00 L491.94,177.58 L408.46,46.25 L375.10,46.25 L341.94,177.58 L307.60,0.00 L248.77,0.00 L295.69,240.59 Z M691.42,133.91 Q712.51,133.91 723.39,143.70 Q734.27,153.55 734.27,172.58 Q734.27,184.49 726.79,190.06 Q719.32,195.63 703.18,195.63 L677.55,195.63 L665.33,133.91 L691.42,133.91 Z M657.08,91.06 L639.24,0.00 L577.16,0.00 L624.08,240.59 L715.76,240.59 Q755.41,240.59 775.83,225.74 Q796.30,210.94 796.30,182.07 Q796.30,152.93 780.16,134.06 Q764.07,115.19 736.54,112.46 Q749.12,109.88 757.47,99.62 Q765.88,89.41 772.17,68.32 L792.64,0.00 L730.92,0.00 L712.87,59.76 Q707.35,77.65 699.52,84.36 Q691.73,91.06 676.93,91.06 L657.08,91.06 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
-                <!-- Gauge needle (pointing towards high speed — top-right) -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Pen>
-                        <Pen Brush="#89B4FA" Thickness="3" StartLineCap="Round" EndLineCap="Round"/>
-                    </GeometryDrawing.Pen>
-                    <GeometryDrawing.Geometry>
-                        <LineGeometry StartPoint="32,38" EndPoint="42,22"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- ═══════════ CM ROW ═══════════ -->
 
-                <!-- Needle pivot point (outer) -->
-                <GeometryDrawing Brush="#89B4FA">
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="32,38" RadiusX="4" RadiusY="4"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- CM — Layer 1: gold outer glow  translate(330.23, 725.00) scale(1,-1) -->
+                <DrawingGroup>
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,330.23,725.00"/>
+                    </DrawingGroup.Transform>
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFB99A5D" Thickness="36" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M199.96,11.29 Q177.74,3.40 157.27,-0.62 Q136.80,-4.69 118.44,-4.69 Q69.92,-4.69 40.89,21.91 Q11.91,48.52 11.91,92.35 Q11.91,121.17 21.09,146.70 Q30.32,172.27 48.16,193.36 Q69.30,218.16 99.00,231.52 Q128.75,244.92 163.09,244.92 Q181.76,244.92 200.58,240.49 Q219.45,236.05 238.94,227.03 L228.99,177.27 Q213.52,189.03 197.85,194.49 Q182.22,199.96 164.38,199.96 Q127.15,199.96 101.99,171.29 Q76.88,142.62 76.88,99.57 Q76.88,71.88 92.35,56.05 Q107.82,40.27 135.04,40.27 Q151.28,40.27 169.59,46.15 Q187.89,52.03 210.58,64.61 L199.96,11.29 Z M296.01,240.59 L372.22,240.59 L403.16,112.82 L484.37,240.59 L563.62,240.59 L516.75,0.00 L457.92,0.00 L492.26,177.58 L408.78,46.25 L375.42,46.25 L342.27,177.58 L307.92,0.00 L249.09,0.00 L296.01,240.59 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
-                <!-- Needle pivot point (inner dark) -->
-                <GeometryDrawing Brush="#11111b">
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="32,38" RadiusX="2" RadiusY="2"/>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- CM — Layer 2: white outline + black fill  translate(312.23, 705.00) scale(1,-1) -->
+                <DrawingGroup>
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,312.23,705.00"/>
+                    </DrawingGroup.Transform>
+                    <!-- 2a: white thick outline -->
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFFFFFFF" Thickness="44" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M199.96,11.29 Q177.74,3.40 157.27,-0.62 Q136.80,-4.69 118.44,-4.69 Q69.92,-4.69 40.89,21.91 Q11.91,48.52 11.91,92.35 Q11.91,121.17 21.09,146.70 Q30.32,172.27 48.16,193.36 Q69.30,218.16 99.00,231.52 Q128.75,244.92 163.09,244.92 Q181.76,244.92 200.58,240.49 Q219.45,236.05 238.94,227.03 L228.99,177.27 Q213.52,189.03 197.85,194.49 Q182.22,199.96 164.38,199.96 Q127.15,199.96 101.99,171.29 Q76.88,142.62 76.88,99.57 Q76.88,71.88 92.35,56.05 Q107.82,40.27 135.04,40.27 Q151.28,40.27 169.59,46.15 Q187.89,52.03 210.58,64.61 L199.96,11.29 Z M296.01,240.59 L372.22,240.59 L403.16,112.82 L484.37,240.59 L563.62,240.59 L516.75,0.00 L457.92,0.00 L492.26,177.58 L408.78,46.25 L375.42,46.25 L342.27,177.58 L307.92,0.00 L249.09,0.00 L296.01,240.59 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- 2b: black fill + thin black stroke (the letter body) -->
+                    <GeometryDrawing Brush="#FF050505">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FF050505" Thickness="4" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M199.96,11.29 Q177.74,3.40 157.27,-0.62 Q136.80,-4.69 118.44,-4.69 Q69.92,-4.69 40.89,21.91 Q11.91,48.52 11.91,92.35 Q11.91,121.17 21.09,146.70 Q30.32,172.27 48.16,193.36 Q69.30,218.16 99.00,231.52 Q128.75,244.92 163.09,244.92 Q181.76,244.92 200.58,240.49 Q219.45,236.05 238.94,227.03 L228.99,177.27 Q213.52,189.03 197.85,194.49 Q182.22,199.96 164.38,199.96 Q127.15,199.96 101.99,171.29 Q76.88,142.62 76.88,99.57 Q76.88,71.88 92.35,56.05 Q107.82,40.27 135.04,40.27 Q151.28,40.27 169.59,46.15 Q187.89,52.03 210.58,64.61 L199.96,11.29 Z M296.01,240.59 L372.22,240.59 L403.16,112.82 L484.37,240.59 L563.62,240.59 L516.75,0.00 L457.92,0.00 L492.26,177.58 L408.78,46.25 L375.42,46.25 L342.27,177.58 L307.92,0.00 L249.09,0.00 L296.01,240.59 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
-                <!-- Speed chevrons (bottom, racing feel — semi-transparent) -->
-                <GeometryDrawing>
-                    <GeometryDrawing.Pen>
-                        <Pen Brush="#9989B4FA" Thickness="2" StartLineCap="Round" EndLineCap="Round"/>
-                    </GeometryDrawing.Pen>
-                    <GeometryDrawing.Geometry>
-                        <GeometryGroup>
-                            <PathGeometry Figures="M24,50 L28,46 L24,42"/>
-                            <PathGeometry Figures="M32,50 L36,46 L32,42"/>
-                            <PathGeometry Figures="M40,50 L44,46 L40,42"/>
-                        </GeometryGroup>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
+                <!-- CM — Layer 3: gold hairline, opacity 0.95  translate(319.23, 713.00) scale(1,-1) -->
+                <DrawingGroup Opacity="0.95">
+                    <DrawingGroup.Transform>
+                        <MatrixTransform Matrix="1,0,0,-1,319.23,713.00"/>
+                    </DrawingGroup.Transform>
+                    <GeometryDrawing Brush="{x:Null}">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFB99A5D" Thickness="8" LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry FillRule="Nonzero" Figures="M199.96,11.29 Q177.74,3.40 157.27,-0.62 Q136.80,-4.69 118.44,-4.69 Q69.92,-4.69 40.89,21.91 Q11.91,48.52 11.91,92.35 Q11.91,121.17 21.09,146.70 Q30.32,172.27 48.16,193.36 Q69.30,218.16 99.00,231.52 Q128.75,244.92 163.09,244.92 Q181.76,244.92 200.58,240.49 Q219.45,236.05 238.94,227.03 L228.99,177.27 Q213.52,189.03 197.85,194.49 Q182.22,199.96 164.38,199.96 Q127.15,199.96 101.99,171.29 Q76.88,142.62 76.88,99.57 Q76.88,71.88 92.35,56.05 Q107.82,40.27 135.04,40.27 Q151.28,40.27 169.59,46.15 Q187.89,52.03 210.58,64.61 L199.96,11.29 Z M296.01,240.59 L372.22,240.59 L403.16,112.82 L484.37,240.59 L563.62,240.59 L516.75,0.00 L457.92,0.00 L492.26,177.58 L408.78,46.25 L375.42,46.25 L342.27,177.58 L307.92,0.00 L249.09,0.00 L296.01,240.59 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
 
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
-
-    <!--
-        TODO (packaging): generate a .ico from logo.svg at 16/32/48/256 px and set
-        Window.Icon="path/to/logo.ico" (BitmapFrame source) so the taskbar and
-        Alt-Tab show the branded icon.  Route to Furiosa/Nux for the packaging step.
-        Window.Icon with a DrawingImage source is not reliable for taskbar HICON
-        conversion — do not use DrawingImage for Window.Icon.
-    -->
 
 </ResourceDictionary>

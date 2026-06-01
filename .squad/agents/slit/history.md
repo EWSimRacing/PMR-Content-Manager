@@ -63,6 +63,12 @@ Slit is the UI developer for EWSR_PMR_ModApp. Domain: drop-zone UI, installed mo
 - SVG text elements don't translate to WPF DrawingImage; use PathGeometry for typography or geometric icons
 - Semi-transparent colors in WPF Pen: use #AARRGGBB format (e.g., #7089B4FA for 50% opacity)
 - Keep icons geometric and simple for legibility at small sizes (16–32px)
+- **Logo is now Elliott's provided PMR/CM wordmark SVG** (PMR stacked over CM; brass gold #B99A5D / white / asphalt #050505; transparent background). All previous gauge-badge code removed.
+- **SVG → WPF DrawingImage translation**: Each SVG `<g transform="translate(tx,ty) scale(1,-1)">` becomes a `DrawingGroup` with `<MatrixTransform Matrix="1,0,0,-1,tx,ty"/>`. `scale(1,-1)` flips the path's y-axis so upright SVG paths (converted from text) render correctly in WPF's top-down coordinate system. Stroke-only layers use `GeometryDrawing Brush="{x:Null}"` with a `Pen`; fill layers use `Brush` + `Pen` together. `FillRule="Nonzero"` matches SVG's default. Root `DrawingGroup` uses `ClipGeometry` (RectangleGeometry 1200×800) to lock aspect ratio.
+- **WPF RenderTargetBitmap → multi-res .ico**: No ImageMagick/Inkscape on the machine, so generated via a throwaway `tools/IconGen` console project (net10.0-windows, UseWPF=true). Builds DrawingGroup in C# code, renders to `RenderTargetBitmap` (PixelFormats.Pbgra32, transparent) at 6 sizes on an STA thread ([STAThread] or `Thread.SetApartmentState(STA)`), encodes each as PNG via `PngBitmapEncoder`, then writes ICONDIR + ICONDIRENTRY headers manually and concatenates PNG payloads. PNG-compressed ICO is valid on Windows Vista+; 256 px entry must be PNG per shell requirement. Resulting `app.ico` is 45,083 bytes with 6 entries: 16, 32, 48, 64, 128, 256 px.
+- **Icon wiring**: `<ApplicationIcon>Assets\app.ico</ApplicationIcon>` in the csproj embeds the icon in the .exe for desktop/Explorer display. `<Resource Include="Assets\app.ico"/>` in the csproj makes it available as a WPF pack-URI resource at runtime. `Icon="Assets/app.ico"` on the `<Window>` in MainWindow.xaml sets the title-bar and taskbar icon.
+- **Image aspect ratio**: Wordmark is 3:2 (1200×800). Toolbar `<Image>` now uses `Height="28" Stretch="Uniform"` (no Width constraint) so the image auto-widens to ~42 px and the wordmark is never squished.
+
 
 ## Technical Lessons
 - TwoWay-default bindings: ProgressBar.Value, Slider.Value, ComboBox.SelectedItem, CheckBox.IsChecked, TextBox.Text

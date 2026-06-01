@@ -7,7 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embeds app.ico into the .exe so desktop shortcuts and Explorer show the icon. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Include app.ico as a Resource so Window.Icon="Assets/app.ico" resolves via
+      pack URI at runtime (WPF Window.Icon needs the file as an embedded resource).
+    -->
+    <Resource Include="Assets\app.ico"/>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EWSR_PMR_ModApp.Core\EWSR_PMR_ModApp.Core.csproj" />

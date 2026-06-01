@@ -9,6 +9,7 @@
         Height="680" Width="1040"
         MinHeight="480" MinWidth="700"
         Background="{StaticResource BaseBrush}"
+        Icon="Assets/app.ico"
         AllowDrop="True"
         Drop="Window_Drop"
         DragEnter="Window_DragEnter"
@@ -35,10 +36,10 @@
 
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <!-- TODO (packaging): set Window.Icon to a compiled .ico (BitmapFrame) —
-                         DrawingImage is not reliable as a taskbar HICON.  See Assets/logo.svg. -->
+                    <!-- PMR/CM wordmark — 3:2 aspect ratio (1200×800 viewBox), constrain height only. -->
                     <Image Source="{StaticResource LogoDrawingImage}"
-                           Width="30" Height="30"
+                           Height="28"
+                           Stretch="Uniform"
                            Margin="0,0,8,0"
                            VerticalAlignment="Center"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
