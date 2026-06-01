@@ -1,10 +1,12 @@
-﻿using System.IO;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using EWSR_PMR_ModApp.UI.ViewModels;
+#if DEBUG
+using System.IO;
+using System.Security.Principal;
+#endif
 
 namespace EWSR_PMR_ModApp.UI;
 
@@ -16,13 +18,12 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
 
-    // ── DIAGNOSTIC LOGGING ───────────────────────────────────────────────────
-    // Active so Elliott can capture real runtime data. Remove or gate behind
-    // a debug flag before final release.
+#if DEBUG
+    // ── DIAGNOSTIC LOGGING (Debug builds only) ───────────────────────────────
     private static readonly string _logPath =
         Path.Combine(Path.GetTempPath(), "ewsr_dragdrop.log");
 
-    private int _dragOverLogCount; // throttle DragOver (fires rapidly)
+    private int _dragOverLogCount;
 
     private static void Log(string message)
     {
@@ -50,16 +51,13 @@ public partial class MainWindow : Window
             return $"(error dumping drag data: {ex.Message})";
         }
     }
+#endif
 
     // ── UIPI message-filter P/Invoke ─────────────────────────────────────────
-    // When the app runs elevated, UIPI blocks WM_DROPFILES (and related
-    // messages) from non-elevated sources such as Explorer. Calling
-    // ChangeWindowMessageFilterEx with MSGFLT_ALLOW re-opens that channel for
-    // this specific HWND. NOTE: This fixes the legacy WM_DROPFILES path only.
-    // WPF drag-drop is OLE-based (RegisterDragDrop / IDropTarget); when the
-    // process is elevated and Explorer is not, UIPI also blocks the underlying
-    // COM channel and ChangeWindowMessageFilterEx alone cannot fix it. See the
-    // TODO comment in OnSourceInitialized for the recommended long-term fix.
+    // Allows WM_DROPFILES and related messages from non-elevated sources when
+    // the app runs elevated. Harmless when non-elevated; useful when the user
+    // restarts as Administrator. Called in OnSourceInitialized once the HWND
+    // is available.
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool ChangeWindowMessageFilterEx(
         nint hwnd, uint message, uint action, nint changeInfo);
@@ -80,19 +78,15 @@ public partial class MainWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
 
+#if DEBUG
         try
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
-
-            // Log elevation status so we know which scenario we're in.
             using var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            bool isAdmin  = principal.IsInRole(WindowsBuiltInRole.Administrator);
+            bool isAdmin = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
             Log($"OnSourceInitialized: HWND=0x{hwnd:X} IsElevated={isAdmin}");
 
-            // Apply message filter and capture return + error code for each call.
-            // If any returns false, GetLastWin32Error reveals why.
             bool r1 = ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES,      MSGFLT_ALLOW, nint.Zero);
             int  e1 = Marshal.GetLastWin32Error();
             Log($"  ChangeWindowMessageFilterEx WM_DROPFILES(0x0233):      ok={r1} err={e1}");
@@ -107,24 +101,16 @@ public partial class MainWindow : Window
 
             if (!r1 || !r2 || !r3)
                 Log("  ⚠ One or more filter calls FAILED — WM_DROPFILES path may not be unblocked.");
-
-            if (isAdmin)
-            {
-                Log("  ℹ Running elevated. If filter calls succeeded but drag-drop still fails,");
-                Log("    that confirms UIPI is blocking the OLE channel (not just WM_DROPFILES).");
-                // TODO (follow-up task): The robust fix for elevated drag-drop is a
-                // non-elevated UI process + a minimal elevated helper process that
-                // performs the actual file writes to Program Files. The UI process
-                // stays at medium integrity so Explorer→OLE drag-drop works normally;
-                // the helper is invoked via a named-pipe or COM local-server only for
-                // the file-copy step. See .squad/decisions/inbox/slit-elevated-dragdrop.md
-                // for the full decision and architecture notes.
-            }
         }
         catch (Exception ex)
         {
             Log($"OnSourceInitialized ERROR: {ex.Message}");
         }
+#else
+        ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES,      MSGFLT_ALLOW, nint.Zero);
+        ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA,       MSGFLT_ALLOW, nint.Zero);
+        ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, nint.Zero);
+#endif
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -133,8 +119,6 @@ public partial class MainWindow : Window
 
     private void Window_DragEnter(object sender, DragEventArgs e)
     {
-        _dragOverLogCount = 0;
-
         if (IsZipDrop(e))
         {
             _vm.IsDragOver = true;
@@ -145,34 +129,38 @@ public partial class MainWindow : Window
             e.Effects = DragDropEffects.None;
         }
         e.Handled = true;
-
+#if DEBUG
+        _dragOverLogCount = 0;
         Log($"DragEnter: sender={sender.GetType().Name} {DumpDragData(e)}");
+#endif
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = IsZipDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
-
-        // Log only the first 3 fires and then every 10th — DragOver is rapid.
+#if DEBUG
         _dragOverLogCount++;
         if (_dragOverLogCount <= 3 || _dragOverLogCount % 10 == 0)
             Log($"DragOver #{_dragOverLogCount}: sender={sender.GetType().Name} {DumpDragData(e)}");
+#endif
     }
 
     private void Window_DragLeave(object sender, DragEventArgs e)
     {
         _vm.IsDragOver = false;
         e.Handled = true;
-
+#if DEBUG
         Log($"DragLeave: sender={sender.GetType().Name} AllowedEffects={e.AllowedEffects}");
+#endif
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
         _vm.IsDragOver = false;
+#if DEBUG
         Log($"Drop: sender={sender.GetType().Name} {DumpDragData(e)}");
-
+#endif
         if (!IsZipDrop(e)) return;
 
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
@@ -181,8 +169,9 @@ public partial class MainWindow : Window
             .ToArray();
 
         if (zips.Length == 0) return;
-
+#if DEBUG
         Log($"Drop: launching install for {zips.Length} zip(s): {string.Join(", ", zips)}");
+#endif
 
         // Fire-and-forget async install — ViewModel manages busy state.
         _ = _vm.InstallZipsAsync(zips);

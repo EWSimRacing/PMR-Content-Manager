@@ -51,3 +51,47 @@ if (modInfo?.Files is { Count: > 0 } && modInfo.Files.ContainsKey(zipPath))
     return SkipCategory.Install;
 }
 ```
+
+### 2026-05-31T20:10:18-04:00: Drag-Drop Root Cause Confirmed — RESOLVED
+
+**By:** Slit (UI Dev)
+
+**What:** The persistent drag-drop failure (⊘ cursor, Drop never firing) is fully resolved. Root cause was confirmed by runtime log data; fix is `IsHitTestVisible="False"` on decorative TextBlocks in the drop zone. Diagnostic logging gated behind `#if DEBUG`. Prior UIPI/COM theory was a red herring.
+
+**Why / Details:**
+
+#### Root Cause
+Decorative `TextBlock` elements inside the drop zone StackPanel — especially "Drop a mod .zip here" — were hit-testable by default. When users hovered over the center of the drop zone (the natural drop point), the cursor landed on a TextBlock. Because TextBlocks had no `AllowDrop` and no drag handlers, WPF's OLE layer found no valid drop target and showed ⊘. The `Border` behind them had all the right wiring but was never reached by hit-testing.
+
+The runtime log (`%TEMP%\ewsr_dragdrop.log`) proved this: a `Drop` event fired successfully while running **elevated** (`IsElevated=True`), launching a real install. All three `ChangeWindowMessageFilterEx` calls returned `ok=True`. OLE drag-drop from Explorer works fine even at High integrity — UIPI was never the blocker.
+
+#### Fix
+`IsHitTestVisible="False"` on the four decorative TextBlocks inside `DropZoneBorder`'s StackPanel. This passes drag hit-tests through to the Border behind them.
+
+#### Status
+**RESOLVED** — works both elevated (Restart as Administrator) and non-elevated.
+
+#### Diagnostics
+All diagnostic logging gated behind `#if DEBUG` in `MainWindow.xaml.cs`:
+- `_logPath`, `_dragOverLogCount`, `Log()`, `DumpDragData()` fields/methods — `#if DEBUG` block
+- All `Log()` calls in event handlers — `#if DEBUG` guarded
+- `OnSourceInitialized` elevation check + per-call logging — `#if DEBUG`; Release path is three clean `ChangeWindowMessageFilterEx` calls
+- `System.IO` and `System.Security.Principal` usings — `#if DEBUG`
+- `%TEMP%\ewsr_dragdrop.log` stale file deleted
+
+`ChangeWindowMessageFilterEx` calls retained unconditionally (correct for elevated path; harmless otherwise).
+
+#### What Was NOT the Issue
+- UIPI blocking the OLE COM channel (theory was technically sound but did not match the actual failure)
+- Missing `AllowDrop` on `DropZoneBorder` (fixed in prior round, correct, but not the primary cause)
+- Missing drag handlers on `DropZoneBorder` (fixed in prior round, correct, but not the primary cause)
+- `ChangeWindowMessageFilterEx` not being called (it was called correctly from round 2 onward)
+
+#### Files Changed
+| File | Change |
+|---|---|
+| `src/EWSR_PMR_ModApp.UI/MainWindow.xaml.cs` | Diagnostic logging gated behind `#if DEBUG`; Release path cleaned |
+| `src/EWSR_PMR_ModApp.UI/MainWindow.xaml` | `IsHitTestVisible="False"` on decorative TextBlocks — **the fix; untouched here** |
+| `.squad/agents/slit/history.md` | Confirmed root cause + resolution appended |
+| `.squad/skills/wpf-drag-drop/SKILL.md` | #1 gotcha added; confidence bumped |
+| `.squad/decisions/inbox/slit-dragdrop-resolved.md` | This file |

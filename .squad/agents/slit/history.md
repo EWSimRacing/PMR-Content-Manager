@@ -121,9 +121,75 @@ Adding `AllowDrop` to DropZoneBorder (ba4c336) without also adding the handlers 
 
 **UIPI fix (ba4c336) is still correct:** The `ChangeWindowMessageFilterEx` call in `OnSourceInitialized` is still needed for the elevated/Restart-as-Administrator scenario. Do not remove it.
 
----
+### 2026-05-31T19:57:03-04:00: Drag-Drop Round 3 — OLE vs WM_DROPFILES Insight + Diagnostics
 
-## 2026-05-31T18:55:17-04:00: WarningsDialog Receives Per-File Warnings
+#### The real root cause (confirmed by reasoning, to be confirmed by log data)
+
+`ChangeWindowMessageFilterEx` only unblocks the **legacy Win32 WM_DROPFILES path**. WPF drag-and-drop is entirely **OLE-based**: it uses `RegisterDragDrop` / `IDropTarget` / `IDataObject` via COM cross-process marshaling. When the app is elevated (High integrity) and the drag source (Explorer) is Medium integrity, UIPI blocks the COM channel separately — `ChangeWindowMessageFilterEx` does not help. This is why two prior fix rounds both failed despite the code being technically correct.
+
+#### Diagnostics added (Part 1)
+
+Added file-based logging to `MainWindow.xaml.cs` writing to `%TEMP%\ewsr_dragdrop.log`:
+- `OnSourceInitialized`: logs `IsElevated`, HWND, and the bool return + `GetLastWin32Error` for each `ChangeWindowMessageFilterEx` call
+- `DragEnter`: logs sender type, `AllowedEffects`, `GetDataPresent(FileDrop)`, all formats from `GetFormats()`, `IsZipDrop` result
+- `DragOver`: throttled (first 3, then every 10th) — logs same data
+- `DragLeave`: logs sender type
+- `Drop`: logs all data + zip count + paths
+- All wrapped in `try/catch` — logging never throws into UI
+
+**What the log tells us:**
+- If `DragEnter`/`DragOver` never appear while elevated → OLE channel blocked by UIPI. Message filter is irrelevant.
+- If handlers fire but `FileDrop=False` → data serialization issue (unexpected)
+- If handlers fire, `IsZipDrop=True`, no `Drop` entry → something breaks the drop completion
+- If `ChangeWindowMessageFilterEx` returns `ok=False` → even the WM_DROPFILES path is blocked (error code explains why)
+
+**IMPORTANT: Diagnostics are active and should be removed/gated before final release** (log writes to %TEMP% on every drag event).
+
+#### Hardening added (Part 2a)
+
+Added `IsHitTestVisible="False"` to the four decorative TextBlocks inside the drop zone StackPanel (icon, "Drop a mod .zip here", "or", "Multiple zips supported"). The Button is untouched (still clickable). This ensures decorative elements cannot intercept drag hit-testing even though WPF TextBlocks with no Background are already transparent to hit-testing in practice.
+
+#### Fix direction (Part 2b)
+
+**Recommended architecture: non-elevated UI + elevated helper process.**
+- The UI stays `asInvoker` (Medium integrity) — OLE drag-drop from Explorer works perfectly at this level
+- A separate minimal `EWSR_PMR_ModApp.Installer.exe` with a `requireAdministrator` manifest handles the actual file writes to Program Files
+- IPC via named pipe or temp JSON manifest file
+- This is the correct pattern used by professional Windows installers
+- The elevated helper is a short-lived process invoked only when file writes are needed; the UI remains responsive
+
+A TODO comment in `OnSourceInitialized` points to this architecture for the follow-up task.
+
+**Key lesson:** Never try to make an elevated WPF app accept OLE drag-drop from non-elevated Explorer. The UIPI COM channel block cannot be bypassed from user mode. The correct solution is to not elevate the UI.
+
+### 2026-05-31T20:10:18-04:00: Drag-Drop RESOLVED — Confirmed Root Cause (IsHitTestVisible)
+
+#### Confirmed root cause
+The bug was **NOT UIPI**. The OLE/UIPI theory (and the `ChangeWindowMessageFilterEx` detour) was a red herring.
+
+The actual cause: the decorative `TextBlock` elements centered inside the drop zone — especially "Drop a mod .zip here" — were **hit-testable** by default (WPF elements are hit-testable even with no Background, as long as they are visible). When the user hovered over the center of the drop zone (the natural drop point), the cursor was over one of these TextBlocks. Because those TextBlocks had no `AllowDrop` and no drag handlers, WPF's OLE layer found no valid drop target and showed the ⊘ cursor. The `Border` underneath had all the right wiring, but the TextBlocks above it captured the hit-test first.
+
+The runtime log (`%TEMP%\ewsr_dragdrop.log`) proved this conclusively: a Drop event fired successfully while the app was running **elevated** (`IsElevated=True`), launching a real install. The message filter calls all returned `ok=True`. OLE drag-drop from Explorer works fine even at High integrity — UIPI was never the actual blocker.
+
+#### Fix
+`IsHitTestVisible="False"` on the four decorative `TextBlock`s inside the drop zone `StackPanel`. This makes them transparent to hit-testing so drags pass through to the `Border` behind them.
+
+#### Diagnostics cleanup
+All diagnostic logging gated behind `#if DEBUG` in `MainWindow.xaml.cs`:
+- `_logPath`, `_dragOverLogCount`, `Log()`, `DumpDragData()` — inside `#if DEBUG` block
+- All `Log()` calls in `DragEnter`, `DragOver`, `DragLeave`, `Drop` — gated
+- `OnSourceInitialized` logging (elevation check, filter call results) — gated; Release path is just the three clean `ChangeWindowMessageFilterEx` calls
+- `System.IO` and `System.Security.Principal` usings — gated under `#if DEBUG`
+- Log file `%TEMP%\ewsr_dragdrop.log` deleted
+
+`ChangeWindowMessageFilterEx` calls retained unconditionally — harmless and correct for the elevated path.
+
+#### Lessons
+- **Decorative children (TextBlocks/StackPanels) centered in a drop zone must have `IsHitTestVisible="False"`** or they intercept the drag and show ⊘, even when the parent Border has `AllowDrop` and all four handlers. This is the #1 WPF drop zone gotcha that is easy to miss.
+- A WPF `TextBlock` with no `Background` is still hit-testable. Transparent ≠ non-hit-testable in WPF.
+- The UIPI/`ChangeWindowMessageFilterEx` concern was real in theory but was not the live bug. The earlier analysis of OLE-vs-WM_DROPFILES was technically correct but irrelevant to the actual failure mode.
+- Diagnostic logging to `%TEMP%` on every drag event is invaluable for remote debugging. Gate it behind `#if DEBUG` so it never ships.
+
 
 Nux refactored SyncEngine to emit one warning entry per skipped/colliding file instead of aggregated counts. No UI changes needed — WarningsDialog already renders each warning string as its own row.
 
