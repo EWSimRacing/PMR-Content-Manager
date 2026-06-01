@@ -38,7 +38,7 @@
                     <!-- TODO (packaging): set Window.Icon to a compiled .ico (BitmapFrame) —
                          DrawingImage is not reliable as a taskbar HICON.  See Assets/logo.svg. -->
                     <Image Source="{StaticResource LogoDrawingImage}"
-                           Width="28" Height="28"
+                           Width="30" Height="30"
                            Margin="0,0,8,0"
                            VerticalAlignment="Center"
                            RenderOptions.BitmapScalingMode="HighQuality"/>

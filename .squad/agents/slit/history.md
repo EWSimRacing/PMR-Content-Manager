@@ -39,6 +39,31 @@ Slit is the UI developer for EWSR_PMR_ModApp. Domain: drop-zone UI, installed mo
   - Replaces 🎮 emoji in toolbar header
   - Window.Icon deferred to packaging (taskbar .ico)
 
+### PMR Content Manager Logo Redesign (2026-05-31)
+- Elliott rejected the flat checkered-grid logo; requested AMS2 CM-inspired design
+- Researched Assetto Corsa Content Manager visual language:
+  - Circular badge emblem (professional utility feel)
+  - Dashboard/gauge motifs (motorsport dashboard)
+  - Bold monograms and clean typography
+  - Speed lines, chevrons, motion indicators
+- **New design — "PMR Gauge Badge":**
+  - Circular badge with gradient ring border (#45475a → #313244)
+  - Dark disc background (#1e1e2e → #11111b gradient)
+  - Speedometer arc (180° gauge at top) in AccentBrush (#89B4FA)
+  - Gauge needle pointing "high speed" (top-right)
+  - Tick marks around gauge arc (semi-transparent)
+  - Triple racing chevrons at bottom (> > >) for motion feel
+  - ViewBox: 64×64 (scalable down to 16px)
+- Files: `Assets/logo.svg` (SVG source), `Assets/Logo.xaml` (WPF DrawingImage)
+- Resource key `LogoDrawingImage` preserved for compatibility
+- Toolbar Image bumped to 30×30 for new design
+
+## Learnings
+- AMS2/AC Content Manager design cues: circular badge, gauge/dashboard motifs, bold monogram, speed lines
+- SVG text elements don't translate to WPF DrawingImage; use PathGeometry for typography or geometric icons
+- Semi-transparent colors in WPF Pen: use #AARRGGBB format (e.g., #7089B4FA for 50% opacity)
+- Keep icons geometric and simple for legibility at small sizes (16–32px)
+
 ## Technical Lessons
 - TwoWay-default bindings: ProgressBar.Value, Slider.Value, ComboBox.SelectedItem, CheckBox.IsChecked, TextBox.Text
 - WPF TextBlocks are hit-testable even with no Background; use IsHitTestVisible="False" for decorative overlays

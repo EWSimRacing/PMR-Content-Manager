@@ -2,41 +2,108 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        PMR Mod Manager logo — "Checkered Mod" mark.
-        Design: flat 2×2 racing-flag grid on a dark rounded background.
-          • Top-left  + bottom-right squares = AccentBrush (#89B4FA, Catppuccin Mocha blue)
-          • Top-right + bottom-left  squares = Surface0Brush (#313244, dark mid-tone)
-          • Background = MantleBrush (#181825)
-        ViewBox 32×32.  Reads cleanly at 16–40 px.
+        PMR Content Manager logo — Motorsport badge inspired by Content Manager aesthetics.
+        Design: Circular badge with stylized speedometer gauge and racing chevrons.
+          • Outer ring: Surface0Brush (#313244) to #45475a gradient — racing-badge border
+          • Inner disc: MantleBrush (#181825) to #1e1e2e gradient — dark background
+          • Gauge arc + needle + ticks: AccentBrush (#89B4FA) — motorsport dashboard feel
+          • Racing chevrons at bottom: AccentBrush — speed/motion indicator
+        ViewBox 64×64.  Reads cleanly at 16–48 px.
         SVG source of truth: Assets/logo.svg
+        
+        Inspiration: Content Manager's circular badge, gauge/speedometer motif,
+        clean motorsport aesthetic — original design for PMR Content Manager.
     -->
     <DrawingImage x:Key="LogoDrawingImage">
         <DrawingImage.Drawing>
             <DrawingGroup>
 
-                <!-- Rounded dark background -->
-                <GeometryDrawing Brush="#181825">
+                <!-- Outer ring (badge border) with gradient -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#45475a" Offset="0"/>
+                            <GradientStop Color="#313244" Offset="1"/>
+                        </LinearGradientBrush>
+                    </GeometryDrawing.Brush>
                     <GeometryDrawing.Geometry>
-                        <RectangleGeometry Rect="0,0,32,32" RadiusX="6" RadiusY="6"/>
+                        <EllipseGeometry Center="32,32" RadiusX="30" RadiusY="30"/>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
 
-                <!-- Accent squares: top-left and bottom-right -->
-                <GeometryDrawing Brush="#89B4FA">
+                <!-- Inner disc (dark background) with gradient -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#1e1e2e" Offset="0"/>
+                            <GradientStop Color="#11111b" Offset="1"/>
+                        </LinearGradientBrush>
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="32,32" RadiusX="26" RadiusY="26"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Gauge arc (speedometer — 180° arc at top) -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#89B4FA" Thickness="3" StartLineCap="Round" EndLineCap="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M14,36 A20,20 0 0 1 50,36"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Gauge tick marks (semi-transparent) -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#7089B4FA" Thickness="2" StartLineCap="Round" EndLineCap="Round"/>
+                    </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <RectangleGeometry Rect="3,3,13,13"/>
-                            <RectangleGeometry Rect="16,16,13,13"/>
+                            <LineGeometry StartPoint="14,36" EndPoint="17,34"/>
+                            <LineGeometry StartPoint="19,23" EndPoint="22,25"/>
+                            <LineGeometry StartPoint="32,16" EndPoint="32,20"/>
+                            <LineGeometry StartPoint="45,23" EndPoint="42,25"/>
+                            <LineGeometry StartPoint="50,36" EndPoint="47,34"/>
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
 
-                <!-- Surface squares: top-right and bottom-left -->
-                <GeometryDrawing Brush="#313244">
+                <!-- Gauge needle (pointing towards high speed — top-right) -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#89B4FA" Thickness="3" StartLineCap="Round" EndLineCap="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <LineGeometry StartPoint="32,38" EndPoint="42,22"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Needle pivot point (outer) -->
+                <GeometryDrawing Brush="#89B4FA">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="32,38" RadiusX="4" RadiusY="4"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Needle pivot point (inner dark) -->
+                <GeometryDrawing Brush="#11111b">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="32,38" RadiusX="2" RadiusY="2"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Speed chevrons (bottom, racing feel — semi-transparent) -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#9989B4FA" Thickness="2" StartLineCap="Round" EndLineCap="Round"/>
+                    </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <RectangleGeometry Rect="16,3,13,13"/>
-                            <RectangleGeometry Rect="3,16,13,13"/>
+                            <PathGeometry Figures="M24,50 L28,46 L24,42"/>
+                            <PathGeometry Figures="M32,50 L36,46 L32,42"/>
+                            <PathGeometry Figures="M40,50 L44,46 L40,42"/>
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
