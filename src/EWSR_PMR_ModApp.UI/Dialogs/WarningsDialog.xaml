@@ -8,7 +8,7 @@
         Height="420" Width="620"
         MinHeight="240" MinWidth="400"
         WindowStartupLocation="CenterOwner"
-        Background="#1E1E2E"
+        Background="#0A0A0A"
         ResizeMode="CanResizeWithGrip"
         ShowInTaskbar="False">
 
@@ -21,15 +21,15 @@
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="#181825"
+                Background="#050505"
                 Padding="16,12"
-                BorderBrush="#313244"
+                BorderBrush="#E8E4D8"
                 BorderThickness="0,0,0,1">
             <StackPanel>
                 <TextBlock x:Name="TitleText"
                            FontSize="16"
                            FontWeight="SemiBold"
-                           Foreground="#CDD6F4"/>
+                           Foreground="#C2A35A"/>
                 <TextBlock Text="The following warnings were raised. Files listed as collisions were NOT installed."
                            FontSize="12"
                            Foreground="#FAB387"
@@ -46,7 +46,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Padding="0,6"
-                                BorderBrush="#313244"
+                                BorderBrush="#262626"
                                 BorderThickness="0,0,0,1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -59,7 +59,7 @@
                                            VerticalAlignment="Top"/>
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding}"
-                                           Foreground="#CDD6F4"
+                                           Foreground="#EFEADD"
                                            FontSize="12"
                                            TextWrapping="Wrap"/>
                             </Grid>
@@ -71,16 +71,16 @@
 
         <!-- Footer -->
         <Border Grid.Row="2"
-                Background="#181825"
-                BorderBrush="#313244"
+                Background="#050505"
+                BorderBrush="#E8E4D8"
                 BorderThickness="0,1,0,0"
                 Padding="16,10">
             <Button Content="OK"
                     Click="OK_Click"
                     HorizontalAlignment="Right"
-                    Background="#89B4FA"
-                    Foreground="#181825"
-                    BorderBrush="#89B4FA"
+                    Background="#C2A35A"
+                    Foreground="#050505"
+                    BorderBrush="#C2A35A"
                     FontWeight="SemiBold"
                     Padding="24,6"/>
         </Border>

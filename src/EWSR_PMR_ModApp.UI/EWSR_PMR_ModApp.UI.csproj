@@ -17,6 +17,8 @@
       pack URI at runtime (WPF Window.Icon needs the file as an embedded resource).
     -->
     <Resource Include="Assets\app.ico"/>
+    <!-- In-app toolbar logo (PMR/CM mark on black). -->
+    <Resource Include="Assets\logo.png"/>
   </ItemGroup>
 
   <ItemGroup>

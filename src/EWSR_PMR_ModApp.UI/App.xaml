@@ -6,9 +6,6 @@
              Startup="OnStartup">
     <Application.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Assets/Logo.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
 
         <!-- ── Converters ─────────────────────────────────────────────────── -->
         <infra:BoolToVisibilityConverter        x:Key="BoolToVisConverter"/>
@@ -16,14 +13,16 @@
         <infra:ZeroToVisibilityConverter        x:Key="ZeroToVisConverter"/>
         <infra:NonNullToVisibilityConverter     x:Key="NonNullToVisConverter"/>
 
-        <!-- ── Palette (Catppuccin Mocha) ─────────────────────────────────── -->
-        <SolidColorBrush x:Key="BaseBrush"    Color="#1E1E2E"/>
-        <SolidColorBrush x:Key="MantleBrush"  Color="#181825"/>
-        <SolidColorBrush x:Key="Surface0Brush" Color="#313244"/>
-        <SolidColorBrush x:Key="Surface1Brush" Color="#45475A"/>
-        <SolidColorBrush x:Key="AccentBrush"  Color="#89B4FA"/>
-        <SolidColorBrush x:Key="TextBrush"    Color="#CDD6F4"/>
-        <SolidColorBrush x:Key="SubtextBrush" Color="#A6ADC8"/>
+        <!-- ── Palette (PMR/CM logo: black · white borders · brass gold) ──── -->
+        <SolidColorBrush x:Key="BaseBrush"    Color="#0A0A0A"/>
+        <SolidColorBrush x:Key="MantleBrush"  Color="#050505"/>
+        <SolidColorBrush x:Key="Surface0Brush" Color="#161616"/>
+        <SolidColorBrush x:Key="Surface1Brush" Color="#262626"/>
+        <SolidColorBrush x:Key="BorderBrush"  Color="#E8E4D8"/>
+        <SolidColorBrush x:Key="AccentBrush"  Color="#C2A35A"/>
+        <SolidColorBrush x:Key="AccentMutedBrush" Color="#8C7440"/>
+        <SolidColorBrush x:Key="TextBrush"    Color="#EFEADD"/>
+        <SolidColorBrush x:Key="SubtextBrush" Color="#A89F8C"/>
         <SolidColorBrush x:Key="WarningBrush" Color="#FAB387"/>
         <SolidColorBrush x:Key="ErrorBrush"   Color="#F38BA8"/>
         <SolidColorBrush x:Key="SuccessBrush" Color="#A6E3A1"/>
@@ -39,7 +38,7 @@
         <Style TargetType="Button">
             <Setter Property="Background"      Value="{StaticResource Surface0Brush}"/>
             <Setter Property="Foreground"      Value="{StaticResource TextBrush}"/>
-            <Setter Property="BorderBrush"     Value="{StaticResource Surface1Brush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding"         Value="12,6"/>
             <Setter Property="Cursor"          Value="Hand"/>
@@ -91,7 +90,7 @@
         <Style TargetType="TextBox">
             <Setter Property="Background"      Value="{StaticResource Surface0Brush}"/>
             <Setter Property="Foreground"      Value="{StaticResource TextBrush}"/>
-            <Setter Property="BorderBrush"     Value="{StaticResource Surface1Brush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding"         Value="8,4"/>
             <Setter Property="CaretBrush"      Value="{StaticResource TextBrush}"/>
@@ -103,7 +102,7 @@
         <Style TargetType="ComboBox">
             <Setter Property="Background"      Value="{StaticResource Surface0Brush}"/>
             <Setter Property="Foreground"      Value="{StaticResource TextBrush}"/>
-            <Setter Property="BorderBrush"     Value="{StaticResource Surface1Brush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontFamily"      Value="Segoe UI"/>
             <Setter Property="FontSize"        Value="13"/>
@@ -113,7 +112,7 @@
         <Style TargetType="ListBox">
             <Setter Property="Background"                              Value="{StaticResource MantleBrush}"/>
             <Setter Property="Foreground"                              Value="{StaticResource TextBrush}"/>
-            <Setter Property="BorderBrush"                             Value="{StaticResource Surface0Brush}"/>
+            <Setter Property="BorderBrush"                             Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness"                         Value="1"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         </Style>
@@ -135,7 +134,7 @@
                                 <Setter Property="Background" Value="{StaticResource Surface0Brush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#252538"/>
+                                <Setter Property="Background" Value="#1C1A12"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

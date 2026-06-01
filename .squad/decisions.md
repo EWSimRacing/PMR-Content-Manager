@@ -231,3 +231,45 @@ The design takes **inspiration** from Content Manager's visual language (circula
 ### Supersedes
 
 Previous decision: "Checkered Mod" logo (decisions.md, 2026-05-31T21:21:54-04:00)
+
+---
+
+## Decision: Adopt user PMR/CM mark + black/white/gold theme
+
+**Date:** 2026-06-01
+**Author:** Slit
+**Status:** Implemented & verified
+
+### Problem
+
+Elliott supplied a new logo (PMR with a gold "V" wedge over "CM", on black) and asked to use it as the app/desktop/taskbar icon and the in-app toolbar mark, then to retheme the whole app to match: black background, white borders, gold letters/accents.
+
+### Decision — Logo / icon
+
+- Source is a raster PNG (not SVG). Generated assets with Pillow:
+  - `Assets/app.ico` — square, centered crop, 6 PNG-payload entries (16/32/48/64/128/256).
+  - `Assets/logo.png` — tight crop for the toolbar, shown in a rounded black badge.
+- Removed the old vector wordmark: `Assets/Logo.xaml` + `Assets/logo.svg`, and the `App.xaml` MergedDictionary that referenced `Logo.xaml` (resource key `LogoDrawingImage`).
+
+### Decision — Theme (replaces Catppuccin Mocha)
+
+- Backgrounds → black: `BaseBrush #0A0A0A`, `MantleBrush #050505`, surfaces `#161616`/`#262626`.
+- Borders → white: new `BorderBrush #E8E4D8`, applied to buttons, inputs, panels, toolbar, status bar.
+- Accent → brass gold `#C2A35A` (sampled from the logo, avg `#B49862`). Used for headings, primary buttons, progress, selection, drag-over highlight.
+- Text → cream `TextBrush #EFEADD`; secondary `SubtextBrush #A89F8C`.
+- OS title bar painted black via DWM (Win11): immersive dark mode + black caption + white border + gold caption text. Fails harmlessly on older Windows.
+
+### Key learnings
+
+- **Pillow's default `.ico` is not WPF-decodable** — `Window.Icon` threw `XamlParseException → FileFormatException ("image is unrecognized")` at startup. Fix: assemble the ICO manually as PNG-payload entries (ICONDIR + ICONDIRENTRY + concatenated PNGs) — the format WPF accepts (PNG-compressed ICO, Vista+).
+- The supplied logo is designed for black with dark-grey letters; keying out the black for transparency would erase the letters. Keep the black and present it as a rounded badge on the near-black toolbar.
+
+### Verification
+
+- `dotnet build` — 0 warnings, 0 errors
+- `dotnet test` — 164 passed, 0 failed, 0 skipped
+- Launched exe; no startup XAML errors; screenshot confirmed black bg, white borders, gold title/headers/button, cream text, black title bar, PMR/CM badge.
+
+### Supersedes
+
+Previous: "PMR Gauge Badge" / "Checkered Mod" logo, and the Catppuccin Mocha palette.

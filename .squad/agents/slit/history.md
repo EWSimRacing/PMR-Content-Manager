@@ -75,3 +75,13 @@ Slit is the UI developer for EWSR_PMR_ModApp. Domain: drop-zone UI, installed mo
 - WPF TextBlocks are hit-testable even with no Background; use IsHitTestVisible="False" for decorative overlays
 - Drag-drop handlers must be wired to the AllowDrop element itself, not distant ancestors
 - Elevated WPF OLE drag-drop from non-elevated Explorer: use non-elevated UI + elevated helper pattern (not ChangeWindowMessageFilterEx fixes)
+
+### 2026-06-01: User PMR/CM logo + black/white/gold retheme
+- Elliott supplied a raster PNG (PMR with gold "V" wedge over "CM" on black). Used it for the app/desktop/taskbar icon AND the toolbar mark, and rethemed the app to match.
+- **Icon generation (raster source):** Pillow auto-crops the non-black bounding box (threshold 40 to include the dark-grey letters but skip the vignette). Toolbar = tight crop kept on its black bg in a rounded `Border` badge; icon = centered square crop with ~30% black padding.
+- **CRITICAL — Pillow's default `.ico` is NOT WPF-decodable.** `Window.Icon` threw `XamlParseException → FileFormatException ("The image is unrecognized")` at startup. Fix: build the ICO by hand as PNG-payload entries (ICONDIR + 16-byte ICONDIRENTRY per size + concatenated PNG bytes; height byte 0 ⇒ 256). This is the same PNG-compressed ICO format that already worked for the app (Vista+). Sizes 16/32/48/64/128/256.
+- **Don't key out the black for transparency** — the PMR letters are dark grey on black; removing black erases them. Keep the black and frame it as a rounded badge on the near-black toolbar.
+- **Palette (replaces Catppuccin Mocha) in App.xaml:** Base `#0A0A0A`, Mantle `#050505`, Surface0 `#161616`, Surface1 `#262626`, new `BorderBrush #E8E4D8` (white), Accent `#C2A35A` (brass gold; logo avg `#B49862`), Text `#EFEADD` (cream), Subtext `#A89F8C`. Headings/section labels switched to AccentBrush (gold); AccentButton stays gold-on-black.
+- **White borders:** repointed Button/TextBox/ComboBox/ListBox/toolbar/status-bar/drop-zone `BorderBrush` from the old Surface brushes to `BorderBrush`. Dialogs (Warnings, AmbiguousMapping) use hardcoded hex (separate Windows) — reskinned each manually.
+- **Black OS title bar:** added `DwmSetWindowAttribute` P/Invoke in `MainWindow.OnSourceInitialized` — `DWMWA_USE_IMMERSIVE_DARK_MODE(20)`, `DWMWA_CAPTION_COLOR(35)`=black, `DWMWA_BORDER_COLOR(34)`=white, `DWMWA_TEXT_COLOR(36)`=gold. COLORREF is `0x00BBGGRR`. Try/catch so it no-ops on pre-Win11.
+- **Verification:** build green; 164/164 tests; launched exe and screen-captured the window (via process `MainWindowHandle` + `Graphics.CopyFromScreen`) to confirm the look. Screenshots can't find the window by title (em-dash) — enumerate by process handle instead.

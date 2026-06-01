@@ -26,7 +26,7 @@
         <!-- ── Toolbar ──────────────────────────────────────────────────── -->
         <Border Grid.Row="0"
                 Background="{StaticResource MantleBrush}"
-                BorderBrush="{StaticResource Surface0Brush}"
+                BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions>
@@ -36,13 +36,17 @@
 
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <!-- PMR/CM wordmark — 3:2 aspect ratio (1200×800 viewBox), constrain height only. -->
-                    <Image Source="{StaticResource LogoDrawingImage}"
-                           Height="28"
-                           Stretch="Uniform"
-                           Margin="0,0,8,0"
-                           VerticalAlignment="Center"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <!-- PMR/CM mark — black-background badge, constrain height only. -->
+                    <Border CornerRadius="5"
+                            Background="#000000"
+                            Padding="8,3"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center">
+                        <Image Source="Assets/logo.png"
+                               Height="26"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
                     <TextBlock Text="Project Motor Racing Mod Manager"
                                FontSize="15"
                                FontWeight="SemiBold"
@@ -99,12 +103,12 @@
 
                 <Border Grid.Row="0"
                         Padding="14,8"
-                        BorderBrush="{StaticResource Surface0Brush}"
+                        BorderBrush="{StaticResource BorderBrush}"
                         BorderThickness="0,0,0,1">
                     <TextBlock Text="INSTALLED MODS"
                                FontSize="10"
                                FontWeight="Bold"
-                               Foreground="{StaticResource SubtextBrush}"/>
+                               Foreground="{StaticResource AccentBrush}"/>
                 </Border>
 
                 <ListBox Grid.Row="1"
@@ -158,7 +162,7 @@
             <!-- Grid splitter -->
             <GridSplitter Grid.Column="1"
                           Width="5"
-                          Background="{StaticResource Surface0Brush}"
+                          Background="{StaticResource Surface1Brush}"
                           HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"/>
 
@@ -180,11 +184,11 @@
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background"   Value="{StaticResource MantleBrush}"/>
-                                <Setter Property="BorderBrush"  Value="{StaticResource Surface1Brush}"/>
+                                <Setter Property="BorderBrush"  Value="{StaticResource BorderBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsDragOver}" Value="True">
                                         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                        <Setter Property="Background"  Value="#1A273E"/>
+                                        <Setter Property="Background"  Value="#221C10"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -263,7 +267,7 @@
                         <TextBlock Text="SETTINGS"
                                    FontSize="10"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource SubtextBrush}"
+                                   Foreground="{StaticResource AccentBrush}"
                                    Margin="0,0,0,12"/>
 
                         <Separator/>
@@ -271,6 +275,7 @@
                         <!-- Game path -->
                         <TextBlock Text="Game Data Path"
                                    FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"
                                    Margin="0,8,0,4"/>
                         <TextBlock Text="Path to the Project Motor Racing 'data' folder. Leave blank to auto-detect via Steam or the default install location."
                                    Foreground="{StaticResource SubtextBrush}"
@@ -303,6 +308,7 @@
                         <!-- Reapply -->
                         <TextBlock Text="Mod Status"
                                    FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"
                                    Margin="0,0,0,6"/>
                         <TextBlock Text="After a game update, mods may be silently reverted. Use Re-check to detect and reapply them."
                                    Foreground="{StaticResource SubtextBrush}"
@@ -319,6 +325,7 @@
 
                         <TextBlock Text="About"
                                    FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"
                                    Margin="0,0,0,4"/>
                         <TextBlock Text="EWSR PMR Mod App  ·  Drop a zip, it just works."
                                    Foreground="{StaticResource SubtextBrush}"
@@ -332,7 +339,7 @@
         <!-- ── Status bar ────────────────────────────────────────────────── -->
         <Border Grid.Row="2"
                 Background="{StaticResource MantleBrush}"
-                BorderBrush="{StaticResource Surface0Brush}"
+                BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="16,0">
             <Grid VerticalAlignment="Center">

@@ -62,6 +62,39 @@ public partial class MainWindow : Window
     private static extern bool ChangeWindowMessageFilterEx(
         nint hwnd, uint message, uint action, nint changeInfo);
 
+    // ── DWM title-bar theming (Win11) ────────────────────────────────────────
+    // Paints the OS caption black with gold text and a white border so the
+    // non-client area matches the in-app PMR/CM theme. Fails harmlessly on
+    // Windows versions that don't support these attributes.
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref int value, int size);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_BORDER_COLOR            = 34;
+    private const int DWMWA_CAPTION_COLOR           = 35;
+    private const int DWMWA_TEXT_COLOR              = 36;
+
+    // COLORREF = 0x00BBGGRR
+    private const int CaptionBlack = 0x00000000;        // #000000
+    private const int BorderWhite  = 0x00D8E4E8;         // #E8E4D8
+    private const int TextGold     = 0x005AA3C2;         // #C2A35A
+
+    private static void ApplyDarkTitleBar(nint hwnd)
+    {
+        try
+        {
+            int on = 1;
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
+            int caption = CaptionBlack;
+            DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref caption, sizeof(int));
+            int border = BorderWhite;
+            DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+            int text = TextGold;
+            DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref text, sizeof(int));
+        }
+        catch { /* unsupported OS — ignore */ }
+    }
+
     private const uint MSGFLT_ALLOW      = 1;
     private const uint WM_DROPFILES      = 0x0233;
     private const uint WM_COPYDATA       = 0x004A;
@@ -79,6 +112,8 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
         var hwnd = new WindowInteropHelper(this).Handle;
+
+        ApplyDarkTitleBar(hwnd);
 
 #if DEBUG
         try

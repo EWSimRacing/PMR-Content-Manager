@@ -8,7 +8,7 @@
         Height="540" Width="700"
         MinHeight="300" MinWidth="500"
         WindowStartupLocation="CenterOwner"
-        Background="#1E1E2E"
+        Background="#0A0A0A"
         ResizeMode="CanResizeWithGrip"
         ShowInTaskbar="False">
 
@@ -21,18 +21,18 @@
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="#181825"
+                Background="#050505"
                 Padding="16,12"
-                BorderBrush="#313244"
+                BorderBrush="#E8E4D8"
                 BorderThickness="0,0,0,1">
             <StackPanel>
                 <TextBlock Text="Ambiguous File Mappings"
                            FontSize="16"
                            FontWeight="SemiBold"
-                           Foreground="#CDD6F4"/>
+                           Foreground="#C2A35A"/>
                 <TextBlock Text="Some files in the zip could not be mapped automatically. Choose the correct target path or skip each file."
                            FontSize="12"
-                           Foreground="#A6ADC8"
+                           Foreground="#A89F8C"
                            TextWrapping="Wrap"
                            Margin="0,4,0,0"/>
             </StackPanel>
@@ -46,8 +46,8 @@
                           Margin="0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Background="#181825"
-                                BorderBrush="#313244"
+                        <Border Background="#050505"
+                                BorderBrush="#262626"
                                 BorderThickness="0,0,0,1"
                                 Padding="16,12">
                             <Grid>
@@ -66,7 +66,7 @@
                                 <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
                                            Text="{Binding ZipPath}"
                                            FontWeight="SemiBold"
-                                           Foreground="#CDD6F4"
+                                           Foreground="#EFEADD"
                                            TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding ZipPath}"/>
 
@@ -82,15 +82,15 @@
                                 <TextBlock Grid.Row="2" Grid.Column="0"
                                            Text="Target:"
                                            FontSize="12"
-                                           Foreground="#A6ADC8"
+                                           Foreground="#A89F8C"
                                            VerticalAlignment="Center"
                                            Margin="0,0,8,0"/>
                                 <ComboBox Grid.Row="2" Grid.Column="1"
                                           ItemsSource="{Binding Options}"
                                           SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
-                                          Background="#313244"
-                                          Foreground="#CDD6F4"
-                                          BorderBrush="#45475A"
+                                          Background="#161616"
+                                          Foreground="#EFEADD"
+                                          BorderBrush="#E8E4D8"
                                           FontSize="12"/>
                             </Grid>
                         </Border>
@@ -101,8 +101,8 @@
 
         <!-- Footer buttons -->
         <Border Grid.Row="2"
-                Background="#181825"
-                BorderBrush="#313244"
+                Background="#050505"
+                BorderBrush="#E8E4D8"
                 BorderThickness="0,1,0,0"
                 Padding="16,10">
             <StackPanel Orientation="Horizontal"
@@ -110,15 +110,15 @@
                 <Button Content="Skip All"
                         Click="SkipAll_Click"
                         Margin="0,0,8,0"
-                        Background="#313244"
-                        Foreground="#CDD6F4"
-                        BorderBrush="#45475A"
+                        Background="#161616"
+                        Foreground="#EFEADD"
+                        BorderBrush="#E8E4D8"
                         Padding="12,6"/>
                 <Button Content="Confirm"
                         Click="Confirm_Click"
-                        Background="#89B4FA"
-                        Foreground="#181825"
-                        BorderBrush="#89B4FA"
+                        Background="#C2A35A"
+                        Foreground="#050505"
+                        BorderBrush="#C2A35A"
                         FontWeight="SemiBold"
                         Padding="16,6"/>
             </StackPanel>
