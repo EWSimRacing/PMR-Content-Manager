@@ -87,7 +87,52 @@
 
         <!-- ── Main content (mod list left / drop zone or settings right) ── -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- Game-not-found banner -->
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Game not found banner -->
+            <Border Grid.Row="0"
+                    Background="#2A1A00"
+                    BorderBrush="{StaticResource WarningBrush}"
+                    BorderThickness="0,0,0,2"
+                    Padding="16,10"
+                    Visibility="{Binding IsGameNotFoundVisible,
+                        Converter={StaticResource BoolToVisConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="&#x26A0;&#xFE0F;"
+                                   FontSize="16"
+                                   Margin="0,0,10,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Foreground="{StaticResource WarningBrush}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap">
+                            <Run Text="Project Motor Racing was not auto-detected."/>
+                            <Run Text=" Go to Settings → Game Data Path and paste or browse to your PMR 'data' folder."/>
+                        </TextBlock>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="Open Settings"
+                            Command="{Binding OpenSettingsForGameCommand}"
+                            Foreground="{StaticResource WarningBrush}"
+                            BorderBrush="{StaticResource WarningBrush}"
+                            Background="#3A2500"
+                            Padding="12,4"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Content row -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="310" MinWidth="200"/>
                 <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="*" MinWidth="260"/>
@@ -327,14 +372,25 @@
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource AccentBrush}"
                                    Margin="0,0,0,4"/>
-                        <TextBlock Text="EWSR PMR Mod App  ·  Drop a zip, it just works."
+                        <TextBlock Foreground="{StaticResource SubtextBrush}"
+                                   FontSize="12">
+                            <Run Text="PMR CM  ·  v"/>
+                            <Run Text="{x:Static vm:MainViewModel.AppVersion}"/>
+                            <Run Text="  ·  Drop a zip, it just works."/>
+                        </TextBlock>
+                        <TextBlock Text="Copyright 2026 Elliott Williams  ·  MIT Licence"
                                    Foreground="{StaticResource SubtextBrush}"
-                                   FontSize="12"/>
+                                   FontSize="11"
+                                   Margin="0,4,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
 
             </Grid>
-        </Grid>
+            <!-- end inner content grid -->
+            </Grid>
+            <!-- end main content wrapper (banner + content) -->
+
+        </Grid> 
 
         <!-- ── Status bar ────────────────────────────────────────────────── -->
         <Border Grid.Row="2"

@@ -230,6 +230,18 @@ public class FileClassifierTests
     public void Json_AtRoot_IsNoPathMatch()
         => Assert.Equal(SkipCategory.NoPathMatch, Classify("settings.json"));
 
+    // ── Install — .eval (FFB / physics eval files) inside data/ ─────────────────
+
+    [Theory]
+    [InlineData("data/vehicles/_shared/physics/hadron/Chassis/ffb.rack.eval")]
+    [InlineData("data/vehicles/_shared/physics/hadron/Chassis/ffb.tire.eval")]
+    public void EvalExtension_InsideDataPath_IsInstall(string path)
+        => Assert.Equal(SkipCategory.Install, Classify(path));
+
+    [Fact]
+    public void EvalExtension_AtRoot_IsNoPathMatch()
+        => Assert.Equal(SkipCategory.NoPathMatch, Classify("ffb.rack.eval"));
+
     // ── Case insensitivity — extensions and paths ─────────────────────────────────
 
     [Theory]
