@@ -34,6 +34,30 @@ public partial class App : Application
         var mainWindow = new MainWindow(mainVm);
         mainWindow.Show();
 
+        // First-run consent: show once before the app will install anything.
+        var settingsStore = _services.GetRequiredService<UISettingsStore>();
+        var uiSettings = settingsStore.Load();
+        if (!uiSettings.HasShownConsentDialog)
+        {
+            var result = MessageBox.Show(
+                "PMR CM modifies Project Motor Racing game files.\n\n" +
+                "Your original files are automatically backed up before any changes " +
+                "and can be fully restored at any time using the Uninstall button.\n\n" +
+                "Continue?",
+                "PMR CM — Before You Start",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Information);
+
+            if (result != MessageBoxResult.OK)
+            {
+                Shutdown(0);
+                return;
+            }
+
+            uiSettings.HasShownConsentDialog = true;
+            settingsStore.Save(uiSettings);
+        }
+
         // Async init: locate game, load manifest.
         _ = mainVm.InitializeAsync();
     }

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using EWSR_PMR_ModApp.Core.Common;
 using EWSR_PMR_ModApp.Core.Elevation;
@@ -30,11 +31,16 @@ public sealed class MainViewModel : ViewModelBase
     private bool     _isBusy;
     private bool     _isDragOver;
     private bool     _isSettingsVisible;
+    private bool     _isGameNotFoundVisible;
     private string   _statusText = "Ready";
     private int      _progressValue;
 
     // SettingsViewModel is injected lazily to avoid circular DI
     private SettingsViewModel? _settingsViewModel;
+
+    /// <summary>Version string from the executing assembly, e.g. "1.0.0".</summary>
+    public static string AppVersion { get; } =
+        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
 
     public MainViewModel(
         IGameLocator    gameLocator,
@@ -53,10 +59,11 @@ public sealed class MainViewModel : ViewModelBase
 
         Mods = new ObservableCollection<ModItemViewModel>();
 
-        BrowseCommand         = new AsyncRelayCommand(BrowseAsync,   () => !IsBusy);
-        ReapplyCommand        = new AsyncRelayCommand(ReapplyAsync,   () => !IsBusy);
-        ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
-        HomeCommand           = new RelayCommand(() => IsSettingsVisible = false);
+        BrowseCommand             = new AsyncRelayCommand(BrowseAsync,   () => !IsBusy);
+        ReapplyCommand            = new AsyncRelayCommand(ReapplyAsync,   () => !IsBusy);
+        ToggleSettingsCommand     = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
+        HomeCommand               = new RelayCommand(() => IsSettingsVisible = false);
+        OpenSettingsForGameCommand = new RelayCommand(() => IsSettingsVisible = true);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -95,6 +102,16 @@ public sealed class MainViewModel : ViewModelBase
         set => SetField(ref _isSettingsVisible, value);
     }
 
+    /// <summary>
+    /// True when game auto-detection failed at startup. Drives the "game not found" banner.
+    /// Cleared as soon as a valid DataRoot is applied.
+    /// </summary>
+    public bool IsGameNotFoundVisible
+    {
+        get => _isGameNotFoundVisible;
+        private set => SetField(ref _isGameNotFoundVisible, value);
+    }
+
     public string StatusText
     {
         get => _statusText;
@@ -118,10 +135,11 @@ public sealed class MainViewModel : ViewModelBase
     // Commands
     // ─────────────────────────────────────────────────────────────────────────
 
-    public AsyncRelayCommand BrowseCommand         { get; }
-    public AsyncRelayCommand ReapplyCommand        { get; }
-    public RelayCommand      ToggleSettingsCommand { get; }
-    public RelayCommand      HomeCommand           { get; }
+    public AsyncRelayCommand BrowseCommand             { get; }
+    public AsyncRelayCommand ReapplyCommand            { get; }
+    public RelayCommand      ToggleSettingsCommand     { get; }
+    public RelayCommand      HomeCommand               { get; }
+    public RelayCommand      OpenSettingsForGameCommand { get; }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Initialization
@@ -136,11 +154,13 @@ public sealed class MainViewModel : ViewModelBase
 
         if (!locatorResult.Found)
         {
+            IsGameNotFoundVisible = true;
             SetStatus("Game not found — configure path in Settings.", 0);
             IsSettingsVisible = true;
             return;
         }
 
+        IsGameNotFoundVisible = false;
         DataRoot = locatorResult.DataRoot;
         SetStatus("Ready — drop a .zip to install.", 0);
 
@@ -150,6 +170,7 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>Called from SettingsViewModel when the user applies a new data root path.</summary>
     public async Task ApplyDataRootAsync(string newDataRoot)
     {
+        IsGameNotFoundVisible = false;
         DataRoot = newDataRoot;
         SetStatus("Path updated — ready.", 0);
 

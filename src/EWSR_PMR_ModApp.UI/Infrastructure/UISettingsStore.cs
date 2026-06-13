@@ -47,4 +47,7 @@ public sealed class UISettings
 {
     /// <summary>User-manually-configured game data path override (null = auto-detect).</summary>
     public string? UserConfiguredGamePath { get; set; }
+
+    /// <summary>True once the user has acknowledged the first-run consent dialog.</summary>
+    public bool HasShownConsentDialog { get; set; }
 }

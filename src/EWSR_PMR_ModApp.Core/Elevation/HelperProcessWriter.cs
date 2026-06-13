@@ -43,7 +43,7 @@ public sealed class HelperProcessWriter : IElevatedWriter
 
             var psi = new ProcessStartInfo
             {
-                FileName        = Path.Combine(AppContext.BaseDirectory, "EWSR_PMR_ModApp.Helper.exe"),
+                FileName        = Path.Combine(AppContext.BaseDirectory, "PMR CM.Helper.exe"),
                 Arguments       = $"\"{requestPath}\"",
                 Verb            = "runas",
                 UseShellExecute = true,

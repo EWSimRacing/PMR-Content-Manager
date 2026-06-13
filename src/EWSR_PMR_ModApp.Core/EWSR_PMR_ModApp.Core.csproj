@@ -4,6 +4,13 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>PMR CM</Product>
+    <Company>EWSR</Company>
+    <Authors>Elliott Williams</Authors>
+    <Copyright>Copyright 2026 Elliott Williams</Copyright>
   </PropertyGroup>
 
 </Project>
