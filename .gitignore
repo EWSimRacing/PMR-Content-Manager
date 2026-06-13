@@ -42,3 +42,6 @@ Desktop.ini
 publish/
 dist/
 artifacts/
+
+# Runtime logs
+*.log
