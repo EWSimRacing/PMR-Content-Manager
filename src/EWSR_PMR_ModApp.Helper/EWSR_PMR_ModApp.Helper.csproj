@@ -10,9 +10,9 @@
     <!-- Disable default WinForms/WPF subsystem so no window appears. -->
     <DisableWinExeProjectSdk>false</DisableWinExeProjectSdk>
     <AssemblyName>PMR CM.Helper</AssemblyName>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <Product>PMR CM</Product>
     <Company>EWSR</Company>
     <Authors>Elliott Williams</Authors>

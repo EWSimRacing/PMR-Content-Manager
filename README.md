@@ -12,13 +12,13 @@
 ## Download
 
 Get the latest release from [GitHub Releases](../../releases) or [Overtake.gg](#).  
-Current version: **v1.0.0**
+Current version: **v1.0.1**
 
 ---
 
 ## How to Use
 
-1. **Download** `PMR-CM-v1.0.0.zip` from the Releases page.
+1. **Download** `PMR-Content-Manager-v1.0.1-win-x64.zip` from the Releases page.
 2. **Extract** the zip anywhere you like (Desktop, Documents, wherever). No installer needed.
 3. **Run `PMR CM.exe`**.
    - On first launch, Windows may show **"Windows protected your PC — unrecognised app"**.  
