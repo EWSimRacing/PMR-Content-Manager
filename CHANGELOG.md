@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## Unreleased
+
+### Changed
+
+- **Single-player only notice** — a permanent banner on the main screen now makes clear that mods change game files and do not work in online multiplayer (online sessions verify the original vanilla files).
+- **Friendlier file-conflict notice** — when a newly installed mod shares files with an already-installed mod, a calm informational dialog now explains in plain language that both mods touch the same files and the most recently installed one is active (no action needed), instead of the previous alarming "warning" wording. Genuine skipped-file warnings keep their own dialog with clearer text.
+
 ## v1.0.0 — 2026-06-13
 
 First public release of **PMR CM** (Project Motor Racing Content Manager).

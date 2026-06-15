@@ -1,0 +1,115 @@
+<Window x:Class="EWSR_PMR_ModApp.UI.Dialogs.ConflictDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="File Conflict"
+        Height="420" Width="640"
+        MinHeight="260" MinWidth="440"
+        WindowStartupLocation="CenterOwner"
+        Background="#0A0A0A"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="#050505"
+                Padding="16,12"
+                BorderBrush="#8C7440"
+                BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="&#x1F500;"
+                           FontSize="18"
+                           Margin="0,0,10,0"
+                           VerticalAlignment="Center"/>
+                <StackPanel>
+                    <TextBlock Text="Heads up — file conflict"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="#C2A35A"/>
+                    <TextBlock x:Name="SubtitleText"
+                               FontSize="12"
+                               Foreground="#A89F8C"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Conflict list -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      Padding="16,10">
+            <ItemsControl x:Name="ConflictList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="12,10"
+                                Margin="0,0,0,8"
+                                CornerRadius="6"
+                                Background="#161616"
+                                BorderBrush="#262626"
+                                BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock TextWrapping="Wrap"
+                                           FontSize="13"
+                                           Foreground="#EFEADD">
+                                    <Run Text="{Binding NewModName, Mode=OneWay}" FontWeight="SemiBold" Foreground="#C2A35A"/>
+                                    <Run Text=" and "/>
+                                    <Run Text="{Binding OtherModName, Mode=OneWay}" FontWeight="SemiBold" Foreground="#C2A35A"/>
+                                    <Run Text=" both change the same file(s). The version from "/>
+                                    <Run Text="{Binding NewModName, Mode=OneWay}" FontWeight="SemiBold" Foreground="#EFEADD"/>
+                                    <Run Text=" is now active because it was installed most recently."/>
+                                </TextBlock>
+                                <ItemsControl ItemsSource="{Binding Files}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}"
+                                                       Foreground="#A89F8C"
+                                                       FontSize="11"
+                                                       FontFamily="Consolas"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                Background="#050505"
+                BorderBrush="#8C7440"
+                BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <Grid>
+                <TextBlock Text="This is normal when two mods touch the same area — no action needed."
+                           Foreground="#A89F8C"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Left"
+                           TextWrapping="Wrap"
+                           MaxWidth="420"/>
+                <Button Content="Got it"
+                        Click="OK_Click"
+                        HorizontalAlignment="Right"
+                        Background="#C2A35A"
+                        Foreground="#050505"
+                        BorderBrush="#C2A35A"
+                        FontWeight="SemiBold"
+                        Padding="24,6"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

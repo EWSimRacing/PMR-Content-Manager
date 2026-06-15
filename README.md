@@ -4,6 +4,8 @@
 
 > **Community tool — not affiliated with or endorsed by the PMR developers.**  
 > PMR CM backs up every original file before making any change. You can restore to vanilla at any time.
+>
+> **Single-player only:** mods change game files and will not work in online multiplayer — those sessions verify the original (vanilla) game files. Use mods for offline / single-player only.
 
 ---
 

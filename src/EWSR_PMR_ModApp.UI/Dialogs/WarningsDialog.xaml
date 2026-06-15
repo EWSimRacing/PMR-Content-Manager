@@ -30,7 +30,7 @@
                            FontSize="16"
                            FontWeight="SemiBold"
                            Foreground="#C2A35A"/>
-                <TextBlock Text="The following warnings were raised. Files listed as collisions were NOT installed."
+                <TextBlock Text="The following files were skipped and not installed (no matching location in the game data, or an unresolved mapping)."
                            FontSize="12"
                            Foreground="#FAB387"
                            TextWrapping="Wrap"

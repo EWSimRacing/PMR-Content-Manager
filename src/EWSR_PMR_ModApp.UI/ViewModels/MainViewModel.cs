@@ -253,12 +253,11 @@ public sealed class MainViewModel : ViewModelBase
                     SetStatus("Updating manifest…", 90);
                     var modEntry  = BuildModEntry(plan);
                     var conflicts = await _manifestStore.DetectConflictsAsync(modEntry);
-                    var warnings  = plan.Warnings.ToList();
-                    foreach (var (existingId, _, path) in conflicts)
-                        warnings.Add($"File '{path}' is also owned by mod '{existingId}' — last-write wins.");
                     await _manifestStore.AddOrUpdateModAsync(modEntry);
 
-                    // Surface warnings/collisions prominently.
+                    // Non-conflict warnings (skipped/unmatched files) stay in the
+                    // plain warnings list; file conflicts get their own calm notice.
+                    var warnings = plan.Warnings.ToList();
                     if (warnings.Count > 0)
                     {
                         var warningsDlg = new WarningsDialog(modName, warnings)
@@ -266,6 +265,26 @@ public sealed class MainViewModel : ViewModelBase
                             Owner = Application.Current.MainWindow
                         };
                         warningsDlg.ShowDialog();
+                    }
+
+                    // Surface inter-mod file conflicts as a friendly, informational
+                    // banner instead of an alarming warning. Last-write-wins, so the
+                    // freshly installed mod is active — nothing actually broke.
+                    if (conflicts.Count > 0)
+                    {
+                        var groups = conflicts
+                            .GroupBy(c => c.Item1)   // existing mod id
+                            .Select(g => new ConflictDialog.ConflictGroup(
+                                NewModName:   modName,
+                                OtherModName: ResolveModName(g.Key),
+                                Files:        g.Select(c => c.Item3).ToList()))
+                            .ToList();
+
+                        var conflictDlg = new ConflictDialog(modName, groups)
+                        {
+                            Owner = Application.Current.MainWindow
+                        };
+                        conflictDlg.ShowDialog();
                     }
 
                     SetStatus($"Installed {writeResult.FilesCopied} file(s) from {modName}.", 100);
@@ -532,6 +551,13 @@ public sealed class MainViewModel : ViewModelBase
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Maps a mod id to its human-readable display name using the installed-mod
+    /// list. Falls back to the id when the name cannot be resolved.
+    /// </summary>
+    private string ResolveModName(string modId) =>
+        Mods.FirstOrDefault(m => m.ModId == modId)?.ModName ?? modId;
 
     private async Task RefreshModListAsync()
     {
