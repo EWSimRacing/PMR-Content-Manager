@@ -17,4 +17,10 @@ public sealed class ModEntry
 
     /// <summary>All files written to the game directory by this mod.</summary>
     public required IReadOnlyList<InstalledFileEntry> Files { get; init; }
+
+    /// <summary>
+    /// Lifecycle hook metadata, or <see langword="null"/> when the mod has no hooks.
+    /// Persisted so CM can run the post-uninstall script at uninstall time.
+    /// </summary>
+    public ModHookMetadata? Hooks { get; init; }
 }

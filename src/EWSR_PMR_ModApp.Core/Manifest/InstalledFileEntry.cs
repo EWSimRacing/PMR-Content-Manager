@@ -1,3 +1,5 @@
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
+
 namespace EWSR_PMR_ModApp.Core.Manifest;
 
 /// <summary>Records a single file written to the game data directory during a mod install.</summary>
@@ -11,6 +13,9 @@ public sealed class InstalledFileEntry
 
     /// <summary>How the target path was determined.</summary>
     public required MappingMethod MappingMethod { get; init; }
+
+    /// <summary>Root that <see cref="RelativeTargetPath"/> is relative to.</summary>
+    public TargetRoot TargetRoot { get; init; } = TargetRoot.Data;
 
     /// <summary>
     /// SHA-256 of the original game file before the mod was applied.

@@ -13,6 +13,7 @@
 using Xunit;
 using EWSR_PMR_ModApp.Core.Common;
 using EWSR_PMR_ModApp.Core.Elevation;
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
 
 namespace EWSR_PMR_ModApp.Core.Tests.Elevation;
 
@@ -106,7 +107,7 @@ public class WritePlanExecutorTests
             Operation     = WritePlanOperation.Install,
             DataRoot      = dataDir,
             ModId         = modId,
-            FilesToBackup = ["vehicles/car_a/livery.dds"],
+            FilesToBackup = [Target("vehicles/car_a/livery.dds")],
             FilesToCopy   = [new FileCopySpec { SourcePath = srcFile, RelativeTargetPath = "vehicles/car_a/livery.dds" }]
         };
 
@@ -121,7 +122,7 @@ public class WritePlanExecutorTests
 
         // Original backed up to AppData backup dir.
         string backupFile = Path.Combine(
-            AppPaths.BackupDirForMod(modId), "vehicles", "car_a", "livery.dds");
+            AppPaths.BackupDirForMod(modId), "__data__", "vehicles", "car_a", "livery.dds");
         Assert.True(File.Exists(backupFile));
         Assert.Equal("original-content", File.ReadAllText(backupFile));
     }
@@ -145,7 +146,7 @@ public class WritePlanExecutorTests
             Operation     = WritePlanOperation.Install,
             DataRoot      = dataDir,
             ModId         = modId,
-            FilesToBackup = ["vehicles/car_a/brand_new.dds"],  // does NOT exist in DataRoot yet
+            FilesToBackup = [Target("vehicles/car_a/brand_new.dds")],  // does NOT exist in DataRoot yet
             FilesToCopy   = [new FileCopySpec { SourcePath = srcFile, RelativeTargetPath = "vehicles/car_a/brand_new.dds" }]
         };
 
@@ -169,7 +170,7 @@ public class WritePlanExecutorTests
 
         // Pre-seed backup directory (simulates a prior Install).
         WriteFile(
-            Path.Combine(AppPaths.BackupDirForMod(modId), "vehicles", "car_a", "livery.dds"),
+            Path.Combine(AppPaths.BackupDirForMod(modId), "__data__", "vehicles", "car_a", "livery.dds"),
             "original-content-for-restore");
 
         // A "new" file added by the mod — no backup exists, so it must be deleted.
@@ -181,7 +182,7 @@ public class WritePlanExecutorTests
             Operation     = WritePlanOperation.Uninstall,
             DataRoot      = dataDir,
             ModId         = modId,
-            FilesToDelete = ["vehicles/car_a/new_skin.dds"]
+            FilesToDelete = [Target("vehicles/car_a/new_skin.dds")]
         };
 
         var result = WritePlanExecutor.Execute(request);
@@ -199,6 +200,63 @@ public class WritePlanExecutorTests
 
         // New mod file was deleted.
         Assert.False(File.Exists(newModFile));
+    }
+
+    [Fact]
+    public void Execute_Uninstall_MixedRoot_RestoresGameRootBackupAndDeletesGameRootNewFile()
+    {
+        string modId    = "wez-mixed-" + Guid.NewGuid().ToString("N");
+        using var scope = new TempScope();
+        scope.AlsoCleanup(AppPaths.BackupDirForMod(modId));
+
+        string gameDir = scope.NewDir();
+        string dataDir = Path.Combine(gameDir, "data");
+        Directory.CreateDirectory(dataDir);
+
+        string gameExisting = WriteFile(Path.Combine(gameDir, "shared", "starmap.dds"), "original-stars");
+        string dataExisting = WriteFile(Path.Combine(dataDir, "vehicles", "car_a", "livery.dds"), "original-livery");
+        string srcDir       = scope.NewDir();
+        string gameSrc      = WriteFile(Path.Combine(srcDir, "starmap.dds"), "mod-stars");
+        string dataSrc      = WriteFile(Path.Combine(srcDir, "livery.dds"), "mod-livery");
+
+        var install = new WritePlanRequest
+        {
+            Operation     = WritePlanOperation.Install,
+            DataRoot      = dataDir,
+            GameRoot      = gameDir,
+            ModId         = modId,
+            FilesToBackup = [Target("vehicles/car_a/livery.dds"), Target("shared/starmap.dds", TargetRoot.Game)],
+            FilesToCopy =
+            [
+                new FileCopySpec { SourcePath = dataSrc, RelativeTargetPath = "vehicles/car_a/livery.dds" },
+                new FileCopySpec { SourcePath = gameSrc, RelativeTargetPath = "shared/starmap.dds", TargetRoot = TargetRoot.Game }
+            ]
+        };
+
+        var installResult = WritePlanExecutor.Execute(install);
+
+        Assert.True(installResult.Success);
+        Assert.Equal("mod-livery", File.ReadAllText(dataExisting));
+        Assert.Equal("mod-stars", File.ReadAllText(gameExisting));
+        Assert.True(File.Exists(Path.Combine(AppPaths.BackupDirForMod(modId), "__data__", "vehicles", "car_a", "livery.dds")));
+        Assert.True(File.Exists(Path.Combine(AppPaths.BackupDirForMod(modId), "__game__", "shared", "starmap.dds")));
+
+        string gameNew = WriteFile(Path.Combine(gameDir, "shared", "new_stars.dds"), "new-game-root-file");
+        var uninstall = new WritePlanRequest
+        {
+            Operation     = WritePlanOperation.Uninstall,
+            DataRoot      = dataDir,
+            GameRoot      = gameDir,
+            ModId         = modId,
+            FilesToDelete = [Target("shared/new_stars.dds", TargetRoot.Game)]
+        };
+
+        var uninstallResult = WritePlanExecutor.Execute(uninstall);
+
+        Assert.True(uninstallResult.Success);
+        Assert.Equal("original-livery", File.ReadAllText(dataExisting));
+        Assert.Equal("original-stars", File.ReadAllText(gameExisting));
+        Assert.False(File.Exists(gameNew));
     }
 
     // ── WritePlanExecutor: Reapply ────────────────────────────────────────────
@@ -324,7 +382,7 @@ public class WritePlanExecutorTests
             Operation     = WritePlanOperation.Install,
             DataRoot      = @"C:\game\data",
             ModId         = "sec-test-backup",
-            FilesToBackup = [@"..\..\Windows\important.dll"]
+            FilesToBackup = [Target(@"..\..\Windows\important.dll")]
         });
 
         Assert.False(result.Success);
@@ -362,4 +420,7 @@ public class WritePlanExecutorTests
         Assert.False(result.Success);
         Assert.Contains("ModId", result.ErrorMessage);
     }
+
+    private static FileTargetSpec Target(string relativePath, TargetRoot targetRoot = TargetRoot.Data) =>
+        new() { RelativeTargetPath = relativePath, TargetRoot = targetRoot };
 }

@@ -4,9 +4,10 @@ namespace EWSR_PMR_ModApp.Core.GameDetection;
 public sealed record GameLocatorResult(
     bool           Found,
     string?        DataRoot,
+    string?        GameRoot,
     LocationSource Source,
     string?        FailureReason = null)
 {
     public static GameLocatorResult NotFound(string reason) =>
-        new(false, null, LocationSource.NotFound, reason);
+        new(false, null, null, LocationSource.NotFound, reason);
 }

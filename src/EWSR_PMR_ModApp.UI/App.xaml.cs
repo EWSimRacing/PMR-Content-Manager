@@ -75,6 +75,7 @@ public partial class App : Application
         services.AddSingleton<IMappingResolver, MappingResolver>();
         services.AddSingleton<IBackupService,   BackupService>();
         services.AddSingleton<ISyncEngine,      SyncEngine>();
+        services.AddSingleton<IHookRunner,      PowerShellHookRunner>();
 
         // ── Elevated writer factory ──────────────────────────────────────────
         // Resolved at operation time so DataRoot changes (e.g. via Settings) are reflected.

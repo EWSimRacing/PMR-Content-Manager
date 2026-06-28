@@ -73,6 +73,7 @@ public sealed class SyncEngine : ISyncEngine
         CancellationToken ct = default)
     {
         var warnings = new List<string>();
+        string gameRoot = GetGameRoot(dataRoot);
 
         // 1. Validate zip integrity.
         Report(progress, "Validating archive", 0);
@@ -113,10 +114,21 @@ public sealed class SyncEngine : ISyncEngine
                     {
                         ZipEntry           = r.ZipEntry,
                         RelativeTargetPath = r.ChosenRelativeTargetPath,
-                        MappingMethod      = MappingMethod.FilenameMatch
+                        MappingMethod      = MappingMethod.FilenameMatch,
+                        TargetRoot         = TargetRoot.Data
                     });
                 }
             }
+
+            var invalidGameRootTargets = allMapped
+                .Where(m => m.TargetRoot == TargetRoot.Game
+                    && !PathValidator.IsAllowedGameRootTarget(gameRoot, dataRoot, m.RelativeTargetPath))
+                .Select(m => $"{m.ZipEntry.FullNameInZip} -> {m.RelativeTargetPath}")
+                .ToList();
+
+            if (invalidGameRootTargets.Count > 0)
+                throw new InvalidOperationException(
+                    "Unsafe game-root target rejected: " + string.Join("; ", invalidGameRootTargets));
 
             // Surface collisions.
             foreach (var collision in plan.Collisions)
@@ -136,21 +148,59 @@ public sealed class SyncEngine : ISyncEngine
             // 6. Generate a stable mod ID.
             string modId = Guid.NewGuid().ToString("N");
 
+            // 7. Resolve any hook scripts declared in modinfo.json.
+            StagedHook? postInstallHook   = null;
+            StagedHook? postUninstallHook = null;
+
+            if (staged.ModInfo?.Hooks is { } hooks && staged.HookScripts.Count > 0)
+            {
+                foreach (var hookEntry in staged.HookScripts)
+                {
+                    if (hooks.PostInstall?.Script is { } piPath &&
+                        string.Equals(hookEntry.FullNameInZip, piPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        postInstallHook = new StagedHook(
+                            hookEntry.StagedFilePath,
+                            hookEntry.FileName,
+                            hooks.PostInstall.Description,
+                            hooks.PostInstall.RequiresElevation);
+                    }
+
+                    if (hooks.PostUninstall?.Script is { } puPath &&
+                        string.Equals(hookEntry.FullNameInZip, puPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        postUninstallHook = new StagedHook(
+                            hookEntry.StagedFilePath,
+                            hookEntry.FileName,
+                            hooks.PostUninstall.Description,
+                            hooks.PostUninstall.RequiresElevation);
+                    }
+                }
+            }
+
             return new InstallPlan
             {
-                ModId            = modId,
-                ModName          = modName,
-                DataRoot         = dataRoot,
-                ZipHash          = staged.ZipHash,
-                StagingDirectory = staged.StagingDirectory,
-                FilesToBackup    = allMapped.Select(m => m.RelativeTargetPath).ToList(),
-                FilesToCopy      = allMapped.Select(m => new FileCopySpec
+                ModId             = modId,
+                ModName           = modName,
+                DataRoot          = dataRoot,
+                GameRoot          = gameRoot,
+                ZipHash           = staged.ZipHash,
+                StagingDirectory  = staged.StagingDirectory,
+                FilesToBackup     = allMapped.Select(m => new FileTargetSpec
+                {
+                    RelativeTargetPath = m.RelativeTargetPath,
+                    TargetRoot         = m.TargetRoot
+                }).ToList(),
+                FilesToCopy       = allMapped.Select(m => new FileCopySpec
                 {
                     SourcePath         = m.ZipEntry.StagedFilePath,
-                    RelativeTargetPath = m.RelativeTargetPath
+                    RelativeTargetPath = m.RelativeTargetPath,
+                    TargetRoot         = m.TargetRoot
                 }).ToList(),
-                MappedFiles = allMapped,
-                Warnings    = warnings
+                MappedFiles       = allMapped,
+                Warnings          = warnings,
+                PostInstallHook   = postInstallHook,
+                PostUninstallHook = postUninstallHook
             };
         }
         catch
@@ -170,7 +220,7 @@ public sealed class SyncEngine : ISyncEngine
         // 7. Backup originals before touching anything in the game directory.
         Report(progress, "Backing up originals", 40);
         await _backupService.BackupFilesAsync(
-            plan.ModId, plan.DataRoot, plan.FilesToBackup, ct)
+            plan.ModId, plan.DataRoot, plan.GameRoot, plan.FilesToBackup, ct)
             .ConfigureAwait(false);
 
         // 8. Copy mod files from staging to the game data root.
@@ -183,7 +233,7 @@ public sealed class SyncEngine : ISyncEngine
             ct.ThrowIfCancellationRequested();
 
             string destPath = Path.Combine(
-                plan.DataRoot,
+                GetBaseRoot(plan.DataRoot, plan.GameRoot, mapping.TargetRoot),
                 mapping.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
             bool    isNew        = !_fs.FileExists(destPath);
@@ -199,6 +249,7 @@ public sealed class SyncEngine : ISyncEngine
                 RelativeTargetPath = mapping.RelativeTargetPath,
                 SourcePathInZip    = mapping.ZipEntry.FullNameInZip,
                 MappingMethod      = mapping.MappingMethod,
+                TargetRoot         = mapping.TargetRoot,
                 OriginalFileHash   = originalHash,
                 InstalledFileHash  = installedHash,
                 IsNewFile          = isNew
@@ -211,15 +262,44 @@ public sealed class SyncEngine : ISyncEngine
         Report(progress, "Caching mod payload", 80);
         await CachePayloadAsync(plan.ModId, plan.MappedFiles, ct).ConfigureAwait(false);
 
+        // 9b. Cache hook scripts to AppData so the uninstall hook is available later.
+        if (plan.PostInstallHook is not null || plan.PostUninstallHook is not null)
+        {
+            string scriptDir = AppPaths.ScriptsDirForMod(plan.ModId);
+            _fs.CreateDirectory(scriptDir);
+
+            if (plan.PostInstallHook is { } piHook)
+                _fs.CopyFile(piHook.StagedPath, Path.Combine(scriptDir, piHook.ScriptName), overwrite: true);
+
+            if (plan.PostUninstallHook is { } puHook)
+                _fs.CopyFile(puHook.StagedPath, Path.Combine(scriptDir, puHook.ScriptName), overwrite: true);
+        }
+
         // 10. Detect conflicts and record in manifest.
         Report(progress, "Updating manifest", 90);
+
+        ModHookMetadata? hookMeta = null;
+        if (plan.PostInstallHook is not null || plan.PostUninstallHook is not null)
+        {
+            hookMeta = new ModHookMetadata
+            {
+                PostInstallScriptName          = plan.PostInstallHook?.ScriptName,
+                PostInstallDescription         = plan.PostInstallHook?.Description,
+                PostInstallRequiresElevation   = plan.PostInstallHook?.RequiresElevation ?? false,
+                PostUninstallScriptName        = plan.PostUninstallHook?.ScriptName,
+                PostUninstallDescription       = plan.PostUninstallHook?.Description,
+                PostUninstallRequiresElevation = plan.PostUninstallHook?.RequiresElevation ?? false
+            };
+        }
+
         var modEntry = new ModEntry
         {
             ModId            = plan.ModId,
             ModName          = plan.ModName,
             SourceZipHash    = plan.ZipHash,
             InstallTimestamp = _clock.GetUtcNow(),
-            Files            = installedFiles
+            Files            = installedFiles,
+            Hooks            = hookMeta
         };
 
         var conflicts = await _manifestStore.DetectConflictsAsync(modEntry, ct).ConfigureAwait(false);
@@ -276,18 +356,42 @@ public sealed class SyncEngine : ISyncEngine
 
         var newFiles = modEntry.Files
             .Where(f => f.IsNewFile)
-            .Select(f => f.RelativeTargetPath)
+            .Select(f => new FileTargetSpec
+            {
+                RelativeTargetPath = f.RelativeTargetPath,
+                TargetRoot         = f.TargetRoot
+            })
             .ToList();
 
         int backedUpCount = modEntry.Files.Count(f => !f.IsNewFile);
 
+        // Resolve post-uninstall hook script from the cached scripts directory.
+        string? postUninstallScriptPath      = null;
+        string? postUninstallDescription     = null;
+        bool    postUninstallNeedsElevation  = false;
+
+        if (modEntry.Hooks?.PostUninstallScriptName is { } scriptName)
+        {
+            string candidatePath = Path.Combine(AppPaths.ScriptsDirForMod(modId), scriptName);
+            if (_fs.FileExists(candidatePath))
+            {
+                postUninstallScriptPath     = candidatePath;
+                postUninstallDescription    = modEntry.Hooks.PostUninstallDescription;
+                postUninstallNeedsElevation = modEntry.Hooks.PostUninstallRequiresElevation;
+            }
+        }
+
         return new UninstallPlan
         {
-            ModId            = modId,
-            ModName          = modEntry.ModName,
-            DataRoot         = dataRoot,
-            NewFilesToDelete = newFiles,
-            BackedUpFileCount = backedUpCount
+            ModId                          = modId,
+            ModName                        = modEntry.ModName,
+            DataRoot                       = dataRoot,
+            GameRoot                       = GetGameRoot(dataRoot),
+            NewFilesToDelete               = newFiles,
+            BackedUpFileCount              = backedUpCount,
+            PostUninstallScriptPath        = postUninstallScriptPath,
+            PostUninstallDescription       = postUninstallDescription,
+            PostUninstallRequiresElevation = postUninstallNeedsElevation
         };
     }
 
@@ -299,17 +403,18 @@ public sealed class SyncEngine : ISyncEngine
         // Restore backed-up originals.
         // NOTE: Writes to C:\Program Files require admin elevation at runtime.
         Report(progress, "Restoring original files", 20);
-        await _backupService.RestoreAsync(plan.ModId, plan.DataRoot, ct).ConfigureAwait(false);
+        await _backupService.RestoreAsync(plan.ModId, plan.DataRoot, plan.GameRoot, ct).ConfigureAwait(false);
 
         // Delete any files that were brand-new (no backup exists for them).
         Report(progress, "Removing new files", 60);
         await Task.Run(() =>
         {
-            foreach (var relative in plan.NewFilesToDelete)
+            foreach (var target in plan.NewFilesToDelete)
             {
                 ct.ThrowIfCancellationRequested();
+                string relative = target.RelativeTargetPath;
                 string path = Path.Combine(
-                    plan.DataRoot,
+                    GetBaseRoot(plan.DataRoot, plan.GameRoot, target.TargetRoot),
                     relative.Replace('/', Path.DirectorySeparatorChar));
                 if (_fs.FileExists(path))
                     _fs.DeleteFile(path);
@@ -319,6 +424,14 @@ public sealed class SyncEngine : ISyncEngine
         Report(progress, "Cleaning up", 80);
         await _backupService.PruneAsync(plan.ModId, ct).ConfigureAwait(false);
         await _manifestStore.RemoveModAsync(plan.ModId, ct).ConfigureAwait(false);
+
+        // Remove cached hook scripts (best-effort — failure here does not block uninstall).
+        string scriptsDir = AppPaths.ScriptsDirForMod(plan.ModId);
+        if (_fs.DirectoryExists(scriptsDir))
+        {
+            try { _fs.DeleteDirectory(scriptsDir, recursive: true); }
+            catch { /* Non-critical — leftover scripts in AppData do not affect game state. */ }
+        }
 
         Report(progress, "Complete", 100);
         return new UninstallResult
@@ -338,6 +451,7 @@ public sealed class SyncEngine : ISyncEngine
     {
         var manifest = await _manifestStore.LoadAsync(ct).ConfigureAwait(false);
         var statuses = new List<ModUpdateStatus>();
+        string gameRoot = GetGameRoot(dataRoot);
 
         foreach (var mod in manifest.Mods.Values)
         {
@@ -361,7 +475,7 @@ public sealed class SyncEngine : ISyncEngine
             {
                 ct.ThrowIfCancellationRequested();
                 string onDisk = Path.Combine(
-                    dataRoot,
+                    GetBaseRoot(dataRoot, gameRoot, file.TargetRoot),
                     file.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
                 if (!_fs.FileExists(onDisk))
@@ -403,6 +517,7 @@ public sealed class SyncEngine : ISyncEngine
     {
         var statuses = await CheckForRevertedModsAsync(dataRoot, ct).ConfigureAwait(false);
         var manifest = await _manifestStore.LoadAsync(ct).ConfigureAwait(false);
+        string gameRoot = GetGameRoot(dataRoot);
 
         var modsToReapply = new List<ModReapplyItem>();
 
@@ -419,7 +534,7 @@ public sealed class SyncEngine : ISyncEngine
                 ct.ThrowIfCancellationRequested();
 
                 string onDiskPath = Path.Combine(
-                    dataRoot,
+                    GetBaseRoot(dataRoot, gameRoot, file.TargetRoot),
                     file.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
                 // Only queue files that are actually out-of-date.
@@ -439,7 +554,8 @@ public sealed class SyncEngine : ISyncEngine
                 filesToCopy.Add(new Elevation.FileCopySpec
                 {
                     SourcePath         = payloadFile,
-                    RelativeTargetPath = file.RelativeTargetPath
+                    RelativeTargetPath = file.RelativeTargetPath,
+                    TargetRoot         = file.TargetRoot
                 });
             }
 
@@ -454,7 +570,7 @@ public sealed class SyncEngine : ISyncEngine
             }
         }
 
-        return new ReapplyPlan { DataRoot = dataRoot, ModsToReapply = modsToReapply };
+        return new ReapplyPlan { DataRoot = dataRoot, GameRoot = gameRoot, ModsToReapply = modsToReapply };
     }
 
     public async Task<ReapplyResult> ExecuteReapplyAsync(
@@ -478,7 +594,7 @@ public sealed class SyncEngine : ISyncEngine
                 ct.ThrowIfCancellationRequested();
 
                 string onDiskPath = Path.Combine(
-                    plan.DataRoot,
+                    GetBaseRoot(plan.DataRoot, plan.GameRoot, spec.TargetRoot),
                     spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
                 if (!_fs.FileExists(spec.SourcePath))
@@ -543,6 +659,12 @@ public sealed class SyncEngine : ISyncEngine
             }
         }, ct).ConfigureAwait(false);
     }
+
+    private static string GetGameRoot(string dataRoot) =>
+        Directory.GetParent(dataRoot)?.FullName ?? string.Empty;
+
+    private static string GetBaseRoot(string dataRoot, string gameRoot, TargetRoot targetRoot) =>
+        targetRoot == TargetRoot.Game ? gameRoot : dataRoot;
 
     private static void Report(IProgress<SyncProgress>? progress, string phase, int percent) =>
         progress?.Report(new SyncProgress { Phase = phase, PercentComplete = percent });

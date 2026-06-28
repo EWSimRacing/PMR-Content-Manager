@@ -1,4 +1,5 @@
 using EWSR_PMR_ModApp.Core.Common;
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
 
 namespace EWSR_PMR_ModApp.Core.Elevation;
 
@@ -9,7 +10,8 @@ namespace EWSR_PMR_ModApp.Core.Elevation;
 /// </summary>
 /// <remarks>
 /// Backup format matches <c>BackupService</c>:
-/// <c>%APPDATA%\EWSR_PMR_ModApp\backups\{modId}\{relativeTargetPath}</c>.
+/// <c>%APPDATA%\EWSR_PMR_ModApp\backups\{modId}\__data__\{relativeTargetPath}</c>
+/// or <c>...\__game__\{relativeTargetPath}</c>.
 /// </remarks>
 public static class WritePlanExecutor
 {
@@ -31,19 +33,19 @@ public static class WritePlanExecutor
             switch (request.Operation)
             {
                 case WritePlanOperation.Install:
-                    filesBackedUp = BackupFiles(request.ModId, request.DataRoot, request.FilesToBackup, errors, logLine);
+                    filesBackedUp = BackupFiles(request.ModId, request.DataRoot, request.GameRoot, request.FilesToBackup, errors, logLine);
                     if (errors.Count == 0)
-                        filesCopied = CopyFiles(request.DataRoot, request.FilesToCopy, errors, logLine);
+                        filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine);
                     break;
 
                 case WritePlanOperation.Uninstall:
-                    filesBackedUp = RestoreBackups(request.ModId, request.DataRoot, errors, logLine);
+                    filesBackedUp = RestoreBackups(request.ModId, request.DataRoot, request.GameRoot, errors, logLine);
                     if (errors.Count == 0)
-                        filesDeleted = DeleteFiles(request.DataRoot, request.FilesToDelete, errors, logLine);
+                        filesDeleted = DeleteFiles(request.DataRoot, request.GameRoot, request.FilesToDelete, errors, logLine);
                     break;
 
                 case WritePlanOperation.Reapply:
-                    filesCopied = CopyFiles(request.DataRoot, request.FilesToCopy, errors, logLine);
+                    filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine);
                     break;
             }
         }
@@ -69,26 +71,28 @@ public static class WritePlanExecutor
     private static int BackupFiles(
         string modId,
         string dataRoot,
-        IReadOnlyList<string>? relativePaths,
+        string gameRoot,
+        IReadOnlyList<FileTargetSpec>? targets,
         List<FileOperationError> errors,
         Action<string>? log)
     {
-        if (relativePaths is null or { Count: 0 }) return 0;
+        if (targets is null or { Count: 0 }) return 0;
 
         string backupDir = AppPaths.BackupDirForMod(modId);
         Directory.CreateDirectory(backupDir);
         int count = 0;
 
-        foreach (string relative in relativePaths)
+        foreach (var target in targets)
         {
-            string source = Path.Combine(dataRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            string relative = target.RelativeTargetPath;
+            string source = Path.Combine(GetBaseRoot(dataRoot, gameRoot, target.TargetRoot), relative.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(source))
             {
                 log?.Invoke($"  backup skip (new file): {relative}");
                 continue; // New file — nothing to back up.
             }
 
-            string dest = Path.Combine(backupDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            string dest = Path.Combine(backupDir, BackupPrefix(target.TargetRoot), relative.Replace('/', Path.DirectorySeparatorChar));
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
@@ -107,6 +111,7 @@ public static class WritePlanExecutor
 
     private static int CopyFiles(
         string dataRoot,
+        string gameRoot,
         IReadOnlyList<FileCopySpec>? specs,
         List<FileOperationError> errors,
         Action<string>? log)
@@ -116,7 +121,7 @@ public static class WritePlanExecutor
 
         foreach (var spec in specs)
         {
-            string dest = Path.Combine(dataRoot, spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+            string dest = Path.Combine(GetBaseRoot(dataRoot, gameRoot, spec.TargetRoot), spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
@@ -144,6 +149,7 @@ public static class WritePlanExecutor
     private static int RestoreBackups(
         string modId,
         string dataRoot,
+        string gameRoot,
         List<FileOperationError> errors,
         Action<string>? log)
     {
@@ -153,8 +159,9 @@ public static class WritePlanExecutor
 
         foreach (string backupFile in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
         {
-            string relative = Path.GetRelativePath(backupDir, backupFile);
-            string dest     = Path.Combine(dataRoot, relative);
+            string relativeFromBackup = Path.GetRelativePath(backupDir, backupFile);
+            var (root, relative) = SplitBackupRelative(relativeFromBackup);
+            string dest = Path.Combine(GetBaseRoot(dataRoot, gameRoot, root), relative);
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
@@ -173,16 +180,18 @@ public static class WritePlanExecutor
 
     private static int DeleteFiles(
         string dataRoot,
-        IReadOnlyList<string>? relativePaths,
+        string gameRoot,
+        IReadOnlyList<FileTargetSpec>? targets,
         List<FileOperationError> errors,
         Action<string>? log)
     {
-        if (relativePaths is null or { Count: 0 }) return 0;
+        if (targets is null or { Count: 0 }) return 0;
         int count = 0;
 
-        foreach (string relative in relativePaths)
+        foreach (var target in targets)
         {
-            string path = Path.Combine(dataRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            string relative = target.RelativeTargetPath;
+            string path = Path.Combine(GetBaseRoot(dataRoot, gameRoot, target.TargetRoot), relative.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path))
             {
                 log?.Invoke($"  delete skip (already gone): {relative}");
@@ -202,5 +211,28 @@ public static class WritePlanExecutor
         }
 
         return count;
+    }
+
+    private static string GetBaseRoot(string dataRoot, string gameRoot, TargetRoot targetRoot) =>
+        targetRoot == TargetRoot.Game ? gameRoot : dataRoot;
+
+    private static string BackupPrefix(TargetRoot targetRoot) =>
+        targetRoot == TargetRoot.Game ? "__game__" : "__data__";
+
+    private static (TargetRoot Root, string RelativePath) SplitBackupRelative(string relativeFromBackup)
+    {
+        string normalized = relativeFromBackup.Replace('\\', '/');
+        int slash = normalized.IndexOf('/');
+        if (slash <= 0)
+            return (TargetRoot.Data, relativeFromBackup);
+
+        string prefix = normalized[..slash];
+        string relative = normalized[(slash + 1)..].Replace('/', Path.DirectorySeparatorChar);
+        if (string.Equals(prefix, "__game__", StringComparison.OrdinalIgnoreCase))
+            return (TargetRoot.Game, relative);
+        if (string.Equals(prefix, "__data__", StringComparison.OrdinalIgnoreCase))
+            return (TargetRoot.Data, relative);
+
+        return (TargetRoot.Data, relativeFromBackup);
     }
 }

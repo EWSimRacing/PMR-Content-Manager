@@ -31,12 +31,13 @@ public sealed class InProcessWriter : IElevatedWriter
             return "ModId is required.";
 
         string appDataRoot = Common.AppPaths.AppDataRoot;
+        string gameRoot = ResolveGameRoot(request);
 
         if (request.FilesToCopy is not null)
         {
             foreach (var spec in request.FilesToCopy)
             {
-                if (!PathValidator.IsUnderDataRoot(request.DataRoot, spec.RelativeTargetPath))
+                if (!IsSafeTarget(request.DataRoot, gameRoot, spec.TargetRoot, spec.RelativeTargetPath))
                     return $"Unsafe target path rejected: '{spec.RelativeTargetPath}'";
                 if (!PathValidator.IsAllowedSource(spec.SourcePath, appDataRoot))
                     return $"Source path not in app data: '{spec.SourcePath}'";
@@ -45,18 +46,32 @@ public sealed class InProcessWriter : IElevatedWriter
 
         if (request.FilesToBackup is not null)
         {
-            foreach (var rel in request.FilesToBackup)
-                if (!PathValidator.IsUnderDataRoot(request.DataRoot, rel))
-                    return $"Unsafe backup path rejected: '{rel}'";
+            foreach (var target in request.FilesToBackup)
+                if (!IsSafeTarget(request.DataRoot, gameRoot, target.TargetRoot, target.RelativeTargetPath))
+                    return $"Unsafe backup path rejected: '{target.RelativeTargetPath}'";
         }
 
         if (request.FilesToDelete is not null)
         {
-            foreach (var rel in request.FilesToDelete)
-                if (!PathValidator.IsUnderDataRoot(request.DataRoot, rel))
-                    return $"Unsafe delete path rejected: '{rel}'";
+            foreach (var target in request.FilesToDelete)
+                if (!IsSafeTarget(request.DataRoot, gameRoot, target.TargetRoot, target.RelativeTargetPath))
+                    return $"Unsafe delete path rejected: '{target.RelativeTargetPath}'";
         }
 
         return null;
     }
+
+    private static string ResolveGameRoot(WritePlanRequest request) =>
+        !string.IsNullOrWhiteSpace(request.GameRoot)
+            ? request.GameRoot
+            : Directory.GetParent(request.DataRoot)?.FullName ?? string.Empty;
+
+    private static bool IsSafeTarget(
+        string dataRoot,
+        string gameRoot,
+        SyncEngine.Mapping.TargetRoot targetRoot,
+        string relativePath) =>
+        targetRoot == SyncEngine.Mapping.TargetRoot.Game
+            ? PathValidator.IsAllowedGameRootTarget(gameRoot, dataRoot, relativePath)
+            : PathValidator.IsUnderDataRoot(dataRoot, relativePath);
 }

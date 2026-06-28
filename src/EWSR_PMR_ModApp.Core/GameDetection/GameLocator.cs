@@ -33,19 +33,19 @@ public sealed class GameLocator : IGameLocator
         if (!string.IsNullOrWhiteSpace(userConfiguredPath))
         {
             return ValidateDataRoot(userConfiguredPath)
-                ? new GameLocatorResult(true, userConfiguredPath, LocationSource.UserConfigured)
+                ? Found(userConfiguredPath, LocationSource.UserConfigured)
                 : GameLocatorResult.NotFound(
                     $"User-configured path '{userConfiguredPath}' does not exist or is not a valid data folder.");
         }
 
         // (b) Hard-coded default.
         if (ValidateDataRoot(DefaultDataRoot))
-            return new GameLocatorResult(true, DefaultDataRoot, LocationSource.DefaultPath);
+            return Found(DefaultDataRoot, LocationSource.DefaultPath);
 
         // (c) Steam detection — best-effort, never throws.
         string? steamPath = await TryDetectViaSteamAsync(ct).ConfigureAwait(false);
         if (steamPath is not null && ValidateDataRoot(steamPath))
-            return new GameLocatorResult(true, steamPath, LocationSource.SteamDetected);
+            return Found(steamPath, LocationSource.SteamDetected);
 
         return GameLocatorResult.NotFound(
             "Game data folder could not be detected automatically. Please set the path in Settings.");
@@ -61,6 +61,9 @@ public sealed class GameLocator : IGameLocator
     }
 
     public bool CanWriteDataRoot(string dataRoot) => _fs.CanWriteDirectory(dataRoot);
+
+    private static GameLocatorResult Found(string dataRoot, LocationSource source) =>
+        new(true, dataRoot, Directory.GetParent(dataRoot)?.FullName, source);
 
     // -------------------------------------------------------------------------
     // Steam detection helpers

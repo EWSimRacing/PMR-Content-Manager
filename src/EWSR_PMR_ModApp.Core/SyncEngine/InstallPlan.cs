@@ -19,6 +19,9 @@ public sealed class InstallPlan
     /// <summary>Absolute path to the validated game data root.</summary>
     public required string DataRoot { get; init; }
 
+    /// <summary>Absolute path to the game root.</summary>
+    public required string GameRoot { get; init; }
+
     /// <summary>SHA-256 hash of the source zip file (for manifest).</summary>
     public required string ZipHash { get; init; }
 
@@ -33,7 +36,7 @@ public sealed class InstallPlan
     /// Relative paths under <see cref="DataRoot"/> that will be overwritten and must be
     /// backed up before any files are copied.
     /// </summary>
-    public required IReadOnlyList<string> FilesToBackup { get; init; }
+    public required IReadOnlyList<FileTargetSpec> FilesToBackup { get; init; }
 
     /// <summary>Source → target copy specs (staged file → relative target in DataRoot).</summary>
     public required IReadOnlyList<FileCopySpec> FilesToCopy { get; init; }
@@ -46,4 +49,16 @@ public sealed class InstallPlan
 
     /// <summary>Warnings accumulated during prepare (collisions, unmatched files, etc.).</summary>
     public required IReadOnlyList<string> Warnings { get; init; }
+
+    /// <summary>
+    /// Post-install hook script staged and ready to cache, or <see langword="null"/> when the
+    /// mod declares no <c>postInstall</c> hook.
+    /// </summary>
+    public StagedHook? PostInstallHook { get; init; }
+
+    /// <summary>
+    /// Post-uninstall hook script staged and ready to cache, or <see langword="null"/> when the
+    /// mod declares no <c>postUninstall</c> hook.
+    /// </summary>
+    public StagedHook? PostUninstallHook { get; init; }
 }

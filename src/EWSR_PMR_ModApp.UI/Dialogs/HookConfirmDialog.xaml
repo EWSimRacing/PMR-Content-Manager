@@ -1,0 +1,126 @@
+<Window x:Class="EWSR_PMR_ModApp.UI.Dialogs.HookConfirmDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Mod Script"
+        Height="340" Width="540"
+        MinHeight="260" MinWidth="420"
+        WindowStartupLocation="CenterOwner"
+        Background="#0A0A0A"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="#050505"
+                Padding="16,12"
+                BorderBrush="#E8E4D8"
+                BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock x:Name="TitleText"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#C2A35A"/>
+                <TextBlock x:Name="SubtitleText"
+                           FontSize="12"
+                           Foreground="#9A9A8A"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Body -->
+        <StackPanel Grid.Row="1" Margin="16,14,16,4">
+
+            <!-- Script name pill -->
+            <Border Background="#111"
+                    BorderBrush="#333"
+                    BorderThickness="1"
+                    Padding="10,8"
+                    CornerRadius="4">
+                <StackPanel>
+                    <TextBlock Text="SCRIPT"
+                               FontSize="10"
+                               Foreground="#9A9A8A"
+                               FontWeight="SemiBold"/>
+                    <TextBlock x:Name="ScriptNameText"
+                               FontSize="13"
+                               Foreground="#EFEADD"
+                               FontFamily="Consolas"
+                               Margin="0,3,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Description (hidden when absent) -->
+            <TextBlock x:Name="DescriptionText"
+                       FontSize="12"
+                       Foreground="#EFEADD"
+                       TextWrapping="Wrap"
+                       Margin="0,12,0,0"/>
+
+            <!-- Elevation notice (hidden when not required) -->
+            <Border x:Name="ElevationBorder"
+                    Background="#1A1408"
+                    BorderBrush="#C2A35A"
+                    BorderThickness="1"
+                    Padding="10,8"
+                    CornerRadius="4"
+                    Margin="0,12,0,0"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="⚡"
+                               Foreground="#C2A35A"
+                               FontSize="14"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="Requires administrator elevation — Windows will show a UAC prompt."
+                               FontSize="12"
+                               Foreground="#C2A35A"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Optional note -->
+            <TextBlock Text="Running this script is optional — the mod's game files are already in place."
+                       FontSize="11"
+                       Foreground="#5A5A4A"
+                       TextWrapping="Wrap"
+                       Margin="0,12,0,0"/>
+        </StackPanel>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                Background="#050505"
+                BorderBrush="#E8E4D8"
+                BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Skip"
+                        Click="Skip_Click"
+                        Background="Transparent"
+                        Foreground="#9A9A8A"
+                        BorderBrush="#444"
+                        Padding="20,6"
+                        Margin="0,0,8,0"/>
+                <Button x:Name="RunButton"
+                        Click="Run_Click"
+                        Background="#C2A35A"
+                        Foreground="#050505"
+                        BorderBrush="#C2A35A"
+                        FontWeight="SemiBold"
+                        Padding="24,6"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

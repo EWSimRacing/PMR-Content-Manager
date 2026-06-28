@@ -20,4 +20,10 @@ public sealed class ZipStagingResult
 
     /// <summary>Files that were skipped with their reason.</summary>
     public IReadOnlyList<SkippedFile> SkippedFiles { get; init; } = [];
+
+    /// <summary>
+    /// Hook scripts declared in <c>modinfo.json</c> and extracted to the staging directory.
+    /// These are never installed to the game data tree — the VM caches them to AppData.
+    /// </summary>
+    public IReadOnlyList<ZipEntryInfo> HookScripts { get; init; } = [];
 }

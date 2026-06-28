@@ -23,6 +23,12 @@ public sealed class ModInfo
     public Dictionary<string, string> Files { get; set; } = [];
 
     /// <summary>
+    /// Maps zip-internal paths to their relative target paths under the game root.
+    /// Targets are still validated by the game-root allowlist before any write.
+    /// </summary>
+    public Dictionary<string, string> GameRootFiles { get; set; } = [];
+
+    /// <summary>
     /// Files to show in the mod detail UI but never install.
     /// Key: path in zip. Value: display metadata.
     /// </summary>
@@ -32,6 +38,12 @@ public sealed class ModInfo
     /// Glob patterns for files to ignore entirely (not installed, not displayed).
     /// </summary>
     public List<string> SkipFiles { get; set; } = [];
+
+    /// <summary>
+    /// Optional lifecycle hook scripts to run after install / after uninstall.
+    /// Hook scripts are cached in CM's AppData directory — never copied to the game tree.
+    /// </summary>
+    public ModHooks? Hooks { get; set; }
 }
 
 /// <summary>Metadata for a file that is shown in the UI but never installed.</summary>

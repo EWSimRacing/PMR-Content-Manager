@@ -17,4 +17,7 @@ public sealed class FileMappingResult
 
     /// <summary>Strategy used to produce this mapping.</summary>
     public required MappingMethod MappingMethod { get; init; }
+
+    /// <summary>Root that <see cref="RelativeTargetPath"/> is relative to.</summary>
+    public TargetRoot TargetRoot { get; init; } = TargetRoot.Data;
 }

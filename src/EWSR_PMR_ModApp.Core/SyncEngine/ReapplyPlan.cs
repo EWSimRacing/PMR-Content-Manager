@@ -11,6 +11,9 @@ public sealed class ReapplyPlan
     /// <summary>Absolute path to the game data root.</summary>
     public required string DataRoot { get; init; }
 
+    /// <summary>Absolute path to the game root.</summary>
+    public required string GameRoot { get; init; }
+
     /// <summary>One entry per mod that has reverted files requiring re-copy.</summary>
     public required IReadOnlyList<ModReapplyItem> ModsToReapply { get; init; }
 }
