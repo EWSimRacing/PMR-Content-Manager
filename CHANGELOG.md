@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v1.3 — 2026-06-28
+
+### New Feature — Game-Root Install Targets
+
+PMR CM can now install mod files that live OUTSIDE the `data\` folder — for example the night-sky `shared\starmap.dds`. Previously CM could only write under the Game Data Path; root-level files were silently dropped.
+
+- **Game-root targets** — mods declare `gameRootFiles` in `modinfo.json` (schema 2). Allowed root locations are restricted to a safe allowlist (`shared`).
+- **Elevation for root writes** — files going to `C:\Program Files\Project Motor Racing\shared\` are written via the elevated helper.
+- **Full backup/restore** — originals are backed up before overwrite and restored on uninstall, same as data files.
+- Self-contained single-file build (no .NET runtime required).
+
+---
+
 ## v1.2 — 2026-06-19
 
 ### New Feature — Mod Lifecycle Hook Scripts
