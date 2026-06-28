@@ -103,9 +103,10 @@ public sealed class ZipService : IZipService
         }, ct).ConfigureAwait(false);
 
         // Classify each entry using FileClassifier.
-        var installEntries = new List<ZipEntryInfo>();
-        var displayFiles   = new List<ZipEntryInfo>();
-        var skippedFiles   = new List<SkippedFile>();
+        var installEntries    = new List<ZipEntryInfo>();
+        var displayFiles      = new List<ZipEntryInfo>();
+        var hookScriptEntries = new List<ZipEntryInfo>();
+        var skippedFiles      = new List<SkippedFile>();
 
         foreach (var e in entries)
         {
@@ -122,6 +123,9 @@ public sealed class ZipService : IZipService
                 case SkipCategory.DisplayOnly:
                     displayFiles.Add(e);
                     break;
+                case SkipCategory.HookScript:
+                    hookScriptEntries.Add(e);
+                    break;
                 default:
                     skippedFiles.Add(new SkippedFile(e.FullNameInZip, category, reason ?? string.Empty));
                     break;
@@ -133,6 +137,7 @@ public sealed class ZipService : IZipService
             StagingDirectory = stagingDir,
             Entries          = installEntries,
             DisplayFiles     = displayFiles,
+            HookScripts      = hookScriptEntries,
             SkippedFiles     = skippedFiles,
             ModInfo          = modInfo,
             ZipHash          = zipHash

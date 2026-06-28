@@ -24,6 +24,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly ISyncEngine     _syncEngine;
     private readonly UISettingsStore _settingsStore;
     private readonly TimeProvider    _clock;
+    private readonly IHookRunner     _hookRunner;
     /// <summary>Resolves the correct writer at operation time based on DataRoot writability.</summary>
     private readonly Func<string, IElevatedWriter> _writerFactory;
 
@@ -48,6 +49,7 @@ public sealed class MainViewModel : ViewModelBase
         ISyncEngine     syncEngine,
         UISettingsStore settingsStore,
         TimeProvider    clock,
+        IHookRunner     hookRunner,
         Func<string, IElevatedWriter> writerFactory)
     {
         _gameLocator   = gameLocator;
@@ -55,6 +57,7 @@ public sealed class MainViewModel : ViewModelBase
         _syncEngine    = syncEngine;
         _settingsStore = settingsStore;
         _clock         = clock;
+        _hookRunner    = hookRunner;
         _writerFactory = writerFactory;
 
         Mods = new ObservableCollection<ModItemViewModel>();
@@ -231,6 +234,7 @@ public sealed class MainViewModel : ViewModelBase
                     {
                         Operation     = WritePlanOperation.Install,
                         DataRoot      = plan.DataRoot,
+                        GameRoot      = plan.GameRoot,
                         ModId         = plan.ModId,
                         FilesToCopy   = plan.FilesToCopy,
                         FilesToBackup = plan.FilesToBackup
@@ -248,6 +252,7 @@ public sealed class MainViewModel : ViewModelBase
                     // Step 3: cache payload to AppData so reapply-after-update works.
                     SetStatus($"Caching {modName} payload…", 85);
                     CachePayload(plan);
+                    CacheHookScripts(plan);
 
                     // Step 4: update manifest (AppData — no elevation needed).
                     SetStatus("Updating manifest…", 90);
@@ -288,6 +293,35 @@ public sealed class MainViewModel : ViewModelBase
                     }
 
                     SetStatus($"Installed {writeResult.FilesCopied} file(s) from {modName}.", 100);
+
+                    // Step 5: Run post-install hook if declared.
+                    if (plan.PostInstallHook is { } hook)
+                    {
+                        string cachedScript = Path.Combine(AppPaths.ScriptsDirForMod(plan.ModId), hook.ScriptName);
+                        var hookDlg = new HookConfirmDialog(
+                            modName, hook.ScriptName, hook.Description,
+                            hook.RequiresElevation, isPostInstall: true)
+                        {
+                            Owner = Application.Current.MainWindow
+                        };
+
+                        if (hookDlg.ShowDialog() == true)
+                        {
+                            SetStatus("Running post-install script…", 100);
+                            var hookResult = await _hookRunner.RunAsync(
+                                cachedScript, DataRoot!, plan.ModId, hook.RequiresElevation);
+
+                            if (!hookResult.Success)
+                            {
+                                MessageBox.Show(
+                                    $"The post-install script reported an error:\n\n{hookResult.ErrorMessage}" +
+                                    "\n\nThe mod files are still installed correctly.",
+                                    "Script Warning",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Warning);
+                            }
+                        }
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -354,6 +388,7 @@ public sealed class MainViewModel : ViewModelBase
             {
                 Operation     = WritePlanOperation.Uninstall,
                 DataRoot      = plan.DataRoot,
+                GameRoot      = plan.GameRoot,
                 ModId         = plan.ModId,
                 FilesToDelete = plan.NewFilesToDelete
             };
@@ -367,8 +402,42 @@ public sealed class MainViewModel : ViewModelBase
                 return;
             }
 
+            // Run post-uninstall hook if the mod declared one (e.g. navlines cleanup).
+            if (plan.PostUninstallScriptPath is { } scriptPath)
+            {
+                var hookDlg = new HookConfirmDialog(
+                    modName,
+                    Path.GetFileName(scriptPath),
+                    plan.PostUninstallDescription,
+                    plan.PostUninstallRequiresElevation,
+                    isPostInstall: false)
+                {
+                    Owner = Application.Current.MainWindow
+                };
+
+                if (hookDlg.ShowDialog() == true)
+                {
+                    SetStatus("Running post-uninstall script…", 90);
+                    var hookResult = await _hookRunner.RunAsync(
+                        scriptPath, plan.DataRoot, plan.ModId, plan.PostUninstallRequiresElevation);
+
+                    if (!hookResult.Success)
+                    {
+                        MessageBox.Show(
+                            $"The post-uninstall script reported an error:\n\n{hookResult.ErrorMessage}" +
+                            "\n\nGame files have already been restored.",
+                            "Script Warning",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                }
+            }
+
             // Clean up backup directory (AppData — no elevation needed).
             TryDeleteDirectory(AppPaths.BackupDirForMod(plan.ModId));
+
+            // Clean up cached hook scripts.
+            TryDeleteDirectory(AppPaths.ScriptsDirForMod(plan.ModId));
 
             // Remove from manifest.
             await _manifestStore.RemoveModAsync(plan.ModId);
@@ -429,6 +498,7 @@ public sealed class MainViewModel : ViewModelBase
             {
                 Operation   = WritePlanOperation.Reapply,
                 DataRoot    = plan.DataRoot,
+                GameRoot    = plan.GameRoot,
                 ModId       = "reapply",
                 FilesToCopy = allFiles
             };
@@ -507,6 +577,22 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Caches hook scripts to AppData so they survive staging cleanup.</summary>
+    private static void CacheHookScripts(InstallPlan plan)
+    {
+        if (plan.PostInstallHook is null && plan.PostUninstallHook is null)
+            return;
+
+        string scriptDir = AppPaths.ScriptsDirForMod(plan.ModId);
+        Directory.CreateDirectory(scriptDir);
+
+        if (plan.PostInstallHook is { } piHook)
+            File.Copy(piHook.StagedPath, Path.Combine(scriptDir, piHook.ScriptName), overwrite: true);
+
+        if (plan.PostUninstallHook is { } puHook)
+            File.Copy(puHook.StagedPath, Path.Combine(scriptDir, puHook.ScriptName), overwrite: true);
+    }
+
     /// <summary>
     /// Builds a <see cref="ModEntry"/> from the install plan.
     /// Hashes are read from staged sources (same bytes as the installed files).
@@ -521,6 +607,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             string backupPath = Path.Combine(
                 backupDir,
+                mapping.TargetRoot == EWSR_PMR_ModApp.Core.SyncEngine.Mapping.TargetRoot.Game ? "__game__" : "__data__",
                 mapping.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
             bool    isNew         = !File.Exists(backupPath);
@@ -532,6 +619,7 @@ public sealed class MainViewModel : ViewModelBase
                 RelativeTargetPath = mapping.RelativeTargetPath,
                 SourcePathInZip    = mapping.ZipEntry.FullNameInZip,
                 MappingMethod      = mapping.MappingMethod,
+                TargetRoot         = mapping.TargetRoot,
                 OriginalFileHash   = originalHash,
                 InstalledFileHash  = installedHash,
                 IsNewFile          = isNew
@@ -544,7 +632,18 @@ public sealed class MainViewModel : ViewModelBase
             ModName          = plan.ModName,
             SourceZipHash    = plan.ZipHash,
             InstallTimestamp = _clock.GetUtcNow(),
-            Files            = installedFiles
+            Files            = installedFiles,
+            Hooks = (plan.PostInstallHook is not null || plan.PostUninstallHook is not null)
+                ? new ModHookMetadata
+                  {
+                      PostInstallScriptName          = plan.PostInstallHook?.ScriptName,
+                      PostInstallDescription         = plan.PostInstallHook?.Description,
+                      PostInstallRequiresElevation   = plan.PostInstallHook?.RequiresElevation ?? false,
+                      PostUninstallScriptName        = plan.PostUninstallHook?.ScriptName,
+                      PostUninstallDescription       = plan.PostUninstallHook?.Description,
+                      PostUninstallRequiresElevation = plan.PostUninstallHook?.RequiresElevation ?? false
+                  }
+                : null
         };
     }
 

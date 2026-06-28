@@ -1,3 +1,6 @@
+using EWSR_PMR_ModApp.Core.Elevation;
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
+
 namespace EWSR_PMR_ModApp.Core.Backup;
 
 /// <summary>
@@ -13,7 +16,8 @@ public interface IBackupService
     Task BackupFilesAsync(
         string modId,
         string dataRoot,
-        IEnumerable<string> relativeTargetPaths,
+        string gameRoot,
+        IEnumerable<FileTargetSpec> targets,
         CancellationToken ct = default);
 
     /// <summary>
@@ -24,12 +28,13 @@ public interface IBackupService
     Task RestoreAsync(
         string modId,
         string dataRoot,
+        string gameRoot,
         CancellationToken ct = default);
 
     /// <summary>
     /// Restores backups for all installed mods. Used for a "clean slate / restore originals" operation.
     /// </summary>
-    Task RestoreAllAsync(string dataRoot, CancellationToken ct = default);
+    Task RestoreAllAsync(string dataRoot, string gameRoot, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all backup files for the given mod. Called after uninstall is confirmed.
@@ -40,5 +45,5 @@ public interface IBackupService
     /// Returns the absolute path of the backup file for a given mod file,
     /// or <c>null</c> if no backup exists.
     /// </summary>
-    string? GetBackupPath(string modId, string relativeTargetPath);
+    string? GetBackupPath(string modId, string relativeTargetPath, TargetRoot targetRoot = TargetRoot.Data);
 }

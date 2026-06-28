@@ -17,6 +17,9 @@ public sealed class WritePlanRequest
     /// <summary>Absolute path to the game data root (e.g. <c>C:\Program Files\...\data</c>).</summary>
     public string DataRoot { get; init; } = string.Empty;
 
+    /// <summary>Absolute path to the game root (e.g. <c>C:\Program Files\Project Motor Racing</c>).</summary>
+    public string GameRoot { get; init; } = string.Empty;
+
     /// <summary>Mod identifier used for backup-directory naming.</summary>
     public string ModId { get; init; } = string.Empty;
 
@@ -24,10 +27,10 @@ public sealed class WritePlanRequest
     public IReadOnlyList<FileCopySpec>? FilesToCopy { get; init; }
 
     /// <summary>Relative paths under <see cref="DataRoot"/> to delete (Uninstall new-file removal).</summary>
-    public IReadOnlyList<string>? FilesToDelete { get; init; }
+    public IReadOnlyList<FileTargetSpec>? FilesToDelete { get; init; }
 
     /// <summary>
     /// Relative paths under <see cref="DataRoot"/> to back up before overwriting (Install only).
     /// </summary>
-    public IReadOnlyList<string>? FilesToBackup { get; init; }
+    public IReadOnlyList<FileTargetSpec>? FilesToBackup { get; init; }
 }

@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v1.2 — 2026-06-19
+
+### New Feature — Mod Lifecycle Hook Scripts
+
+PMR CM can now automatically run PowerShell scripts bundled inside a mod zip at install time and at uninstall time. This is designed for mods that need to do work beyond simple file copying — for example, patching binary AI line cache files after the mod's XML data has been installed.
+
+- **Post-install hook** — runs after all mod files have been copied to the game directory. A confirmation dialog shows the script name, description, and an elevation notice before anything executes. Running the script is always optional — clicking Skip leaves the mod fully installed.
+- **Post-uninstall hook** — runs after CM has restored original game files. Same confirmation dialog. Useful for cleanup that CM's file-restore mechanism doesn't cover (e.g. reverting binary patches).
+- **UAC elevation** — hooks that require elevation launch via a UAC prompt so they can write to `C:\Program Files\`. Non-elevated hooks have their output captured and shown on failure.
+- **Scripts are cached** — hook scripts are stored in `%AppData%\EWSR_PMR_ModApp\scripts\` at install time so the uninstall hook is available even if the original zip is gone.
+- **Safe by default** — only scripts explicitly declared in `modinfo.json` are permitted to run. Any executable or script file in a zip that is *not* declared as a hook remains blocked as before.
+- **Soft failure** — if a hook script fails or is skipped, the mod install/uninstall completes normally. Game files are always left in a consistent state regardless of hook outcome.
+
+---
+
 ## v1.0.1 — 2026-06-15
 
 ### Changed

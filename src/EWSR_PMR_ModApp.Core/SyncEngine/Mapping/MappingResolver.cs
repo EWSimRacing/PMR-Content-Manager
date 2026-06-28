@@ -1,4 +1,5 @@
 using EWSR_PMR_ModApp.Core.Manifest;
+using EWSR_PMR_ModApp.Core.Elevation;
 using EWSR_PMR_ModApp.Core.ZipHandling;
 
 namespace EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
@@ -23,8 +24,27 @@ public sealed class MappingResolver : IMappingResolver
             return new MappingPlan { Mapped = [], Ambiguous = [], Unmatched = [], Collisions = [] };
 
         // ── Strategy 1: modinfo.json ──────────────────────────────────────────
-        if (modInfo is { Files.Count: > 0 })
-            return ApplyCollisionDetection(ResolveViaModInfo(zipEntries, modInfo));
+        if (modInfo is not null && (modInfo.Files.Count > 0 || (modInfo.SchemaVersion >= 2 && modInfo.GameRootFiles.Count > 0)))
+        {
+            var explicitPlan = ResolveViaModInfo(zipEntries, modInfo);
+            if (modInfo.SchemaVersion < 2)
+                return ApplyCollisionDetection(explicitPlan);
+
+            var remainingEntries = explicitPlan.Unmatched;
+            if (remainingEntries.Count == 0)
+                return ApplyCollisionDetection(explicitPlan);
+
+            var heuristicPlan = TryPathOverlay(remainingEntries, dataRoot, dataFileIndex)
+                ?? ResolveViaFilenameIndex(remainingEntries, dataFileIndex);
+
+            return ApplyCollisionDetection(new MappingPlan
+            {
+                Mapped     = explicitPlan.Mapped.Concat(heuristicPlan.Mapped).ToList(),
+                Ambiguous  = heuristicPlan.Ambiguous,
+                Unmatched  = heuristicPlan.Unmatched,
+                Collisions = []
+            });
+        }
 
         // ── Strategy 2: path-overlay ─────────────────────────────────────────
         var overlayPlan = TryPathOverlay(zipEntries, dataRoot, dataFileIndex);
@@ -49,15 +69,23 @@ public sealed class MappingResolver : IMappingResolver
         {
             if (IsModInfoFile(entry.FileName)) continue;
 
-            // modinfo.Files key may be a bare filename or a full zip path.
-            if (modInfo.Files.TryGetValue(entry.FileName, out string? target)
-                || modInfo.Files.TryGetValue(entry.FullNameInZip, out target))
+            if (TryResolveExplicitTarget(modInfo.Files, entry, out string? target))
             {
                 mapped.Add(new FileMappingResult
                 {
                     ZipEntry           = entry,
                     RelativeTargetPath = Normalize(target),
                     MappingMethod      = MappingMethod.ModInfo
+                });
+            }
+            else if (modInfo.SchemaVersion >= 2 && TryResolveExplicitTarget(modInfo.GameRootFiles, entry, out target))
+            {
+                mapped.Add(new FileMappingResult
+                {
+                    ZipEntry           = entry,
+                    RelativeTargetPath = Normalize(target),
+                    MappingMethod      = MappingMethod.ModInfo,
+                    TargetRoot         = TargetRoot.Game
                 });
             }
             else
@@ -91,6 +119,10 @@ public sealed class MappingResolver : IMappingResolver
 
         if (hasDataRoot)
             return BuildOverlayPlan(zipEntries, StripLeadingSegment, MappingMethod.PathOverlay);
+
+        // Variant B: Every top-level zip directory matches a known child of the data root.
+        if (topLevelDirs.Any(dir => string.Equals(dir, "shared", StringComparison.OrdinalIgnoreCase)))
+            return null;
 
         // Variant B: Every top-level zip directory matches a known child of the data root.
         if (topLevelDirs.Count > 0 && topLevelDirs.All(dir =>
@@ -143,6 +175,22 @@ public sealed class MappingResolver : IMappingResolver
 
     private static string IdentityTransform(string zipPath) => zipPath;
 
+    private static bool TryResolveExplicitTarget(
+        Dictionary<string, string> map,
+        ZipEntryInfo entry,
+        out string target)
+    {
+        if (map.TryGetValue(entry.FileName, out string? byName)
+            || map.TryGetValue(entry.FullNameInZip, out byName))
+        {
+            target = byName;
+            return true;
+        }
+
+        target = string.Empty;
+        return false;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Strategy 3 — filename-index fallback
     // ─────────────────────────────────────────────────────────────────────────
@@ -163,6 +211,11 @@ public sealed class MappingResolver : IMappingResolver
         foreach (var entry in zipEntries)
         {
             if (IsModInfoFile(entry.FileName)) continue;
+            if (IsTopLevelSharedPath(entry.FullNameInZip))
+            {
+                unmatched.Add(entry);
+                continue;
+            }
 
             if (!index.TryGetValue(entry.FileName, out var candidates) || candidates.Count == 0)
             {
@@ -245,6 +298,9 @@ public sealed class MappingResolver : IMappingResolver
     private static bool IsModInfoFile(string fileName) =>
         string.Equals(fileName, "modinfo.json", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsTopLevelSharedPath(string fullNameInZip) =>
+        string.Equals(GetTopLevelDir(fullNameInZip), "shared", StringComparison.OrdinalIgnoreCase);
+
     private static string Normalize(string path) =>
         path.Replace('\\', '/').TrimStart('/');
 
@@ -258,14 +314,14 @@ public sealed class MappingResolver : IMappingResolver
     private static MappingPlan ApplyCollisionDetection(MappingPlan plan)
     {
         var groups = plan.Mapped
-            .GroupBy(m => m.RelativeTargetPath, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(m => (m.TargetRoot, m.RelativeTargetPath), new MappingCollisionKeyComparer())
             .ToList();
 
         var collisions = groups
             .Where(g => g.Count() > 1)
             .Select(g => new CollisionMapping
             {
-                RelativeTargetPath = g.Key,
+                RelativeTargetPath = g.Key.RelativeTargetPath,
                 Entries            = g.ToList()
             })
             .ToList();
@@ -280,11 +336,11 @@ public sealed class MappingResolver : IMappingResolver
             };
 
         var collidingPaths = collisions
-            .Select(c => c.RelativeTargetPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .SelectMany(c => c.Entries.Select(e => (e.TargetRoot, e.RelativeTargetPath)))
+            .ToHashSet(new MappingCollisionKeyComparer());
 
         var safeMapped = plan.Mapped
-            .Where(m => !collidingPaths.Contains(m.RelativeTargetPath))
+            .Where(m => !collidingPaths.Contains((m.TargetRoot, m.RelativeTargetPath)))
             .ToList();
 
         return new MappingPlan
@@ -294,5 +350,17 @@ public sealed class MappingResolver : IMappingResolver
             Unmatched  = plan.Unmatched,
             Collisions = collisions
         };
+    }
+
+    private sealed class MappingCollisionKeyComparer : IEqualityComparer<(TargetRoot TargetRoot, string RelativeTargetPath)>
+    {
+        public bool Equals(
+            (TargetRoot TargetRoot, string RelativeTargetPath) x,
+            (TargetRoot TargetRoot, string RelativeTargetPath) y) =>
+            x.TargetRoot == y.TargetRoot
+            && string.Equals(x.RelativeTargetPath, y.RelativeTargetPath, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((TargetRoot TargetRoot, string RelativeTargetPath) obj) =>
+            HashCode.Combine(obj.TargetRoot, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.RelativeTargetPath));
     }
 }

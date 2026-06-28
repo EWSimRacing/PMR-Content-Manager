@@ -7,6 +7,7 @@
 using System.Text.Json;
 using Xunit;
 using EWSR_PMR_ModApp.Core.Elevation;
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
 
 namespace EWSR_PMR_ModApp.Core.Tests.Elevation;
 
@@ -30,6 +31,7 @@ public class DtoSerializationTests
         {
             Operation     = WritePlanOperation.Install,
             DataRoot      = @"C:\Program Files\PMR\data",
+            GameRoot      = @"C:\Program Files\PMR",
             ModId         = "mod-abc-123",
             FilesToCopy   =
             [
@@ -44,14 +46,15 @@ public class DtoSerializationTests
                     RelativeTargetPath = "sounds/engine.wav"
                 }
             ],
-            FilesToBackup = ["vehicles/car_a/livery.dds"],
-            FilesToDelete = ["vehicles/car_a/old_skin.dds"]
+            FilesToBackup = [new FileTargetSpec { RelativeTargetPath = "vehicles/car_a/livery.dds" }],
+            FilesToDelete = [new FileTargetSpec { RelativeTargetPath = "shared/starmap.dds", TargetRoot = TargetRoot.Game }]
         };
 
         var rt = RoundTrip(original);
 
         Assert.Equal(original.Operation, rt.Operation);
         Assert.Equal(original.DataRoot,  rt.DataRoot);
+        Assert.Equal(original.GameRoot,  rt.GameRoot);
         Assert.Equal(original.ModId,     rt.ModId);
 
         Assert.NotNull(rt.FilesToCopy);
@@ -61,10 +64,12 @@ public class DtoSerializationTests
         Assert.Equal("sounds/engine.wav",                  rt.FilesToCopy[1].RelativeTargetPath);
 
         Assert.NotNull(rt.FilesToBackup);
-        Assert.Equal("vehicles/car_a/livery.dds", Assert.Single(rt.FilesToBackup!));
+        Assert.Equal("vehicles/car_a/livery.dds", Assert.Single(rt.FilesToBackup!).RelativeTargetPath);
 
         Assert.NotNull(rt.FilesToDelete);
-        Assert.Equal("vehicles/car_a/old_skin.dds", Assert.Single(rt.FilesToDelete!));
+        var delete = Assert.Single(rt.FilesToDelete!);
+        Assert.Equal("shared/starmap.dds", delete.RelativeTargetPath);
+        Assert.Equal(TargetRoot.Game, delete.TargetRoot);
     }
 
     [Fact]
@@ -76,6 +81,7 @@ public class DtoSerializationTests
         {
             Operation     = WritePlanOperation.Uninstall,
             DataRoot      = @"C:\PMR\data",
+            GameRoot      = @"C:\PMR",
             ModId         = "mod-xyz",
             FilesToCopy   = null,
             FilesToBackup = null,
@@ -97,6 +103,7 @@ public class DtoSerializationTests
         {
             Operation   = WritePlanOperation.Reapply,
             DataRoot    = @"C:\PMR\data",
+            GameRoot    = @"C:\PMR",
             ModId       = "mod-reapply",
             FilesToCopy = [new FileCopySpec { SourcePath = @"C:\AppData\mods\x\f.dds", RelativeTargetPath = "vehicles/f.dds" }]
         };
@@ -170,13 +177,15 @@ public class DtoSerializationTests
         var original = new FileCopySpec
         {
             SourcePath         = @"C:\AppData\EWSR_PMR_ModApp\staging\abc\livery.dds",
-            RelativeTargetPath = "vehicles/car_a/livery.dds"
+            RelativeTargetPath = "shared/starmap.dds",
+            TargetRoot         = TargetRoot.Game
         };
 
         var rt = RoundTrip(original);
 
         Assert.Equal(original.SourcePath,         rt.SourcePath);
         Assert.Equal(original.RelativeTargetPath, rt.RelativeTargetPath);
+        Assert.Equal(original.TargetRoot,         rt.TargetRoot);
     }
 
     // ── FileOperationError ────────────────────────────────────────────────────

@@ -84,7 +84,7 @@ public sealed class ManifestStore : IManifestStore
     {
         var manifest = await LoadAsync(ct).ConfigureAwait(false);
         var candidatePaths = candidate.Files
-            .Select(f => Normalize(f.RelativeTargetPath))
+            .Select(f => $"{f.TargetRoot}:{Normalize(f.RelativeTargetPath)}")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var conflicts = new List<(string, string, string)>();
@@ -93,7 +93,7 @@ public sealed class ManifestStore : IManifestStore
             if (mod.ModId == candidate.ModId) continue;
             foreach (var file in mod.Files)
             {
-                if (candidatePaths.Contains(Normalize(file.RelativeTargetPath)))
+                if (candidatePaths.Contains($"{file.TargetRoot}:{Normalize(file.RelativeTargetPath)}"))
                     conflicts.Add((mod.ModId, candidate.ModId, file.RelativeTargetPath));
             }
         }

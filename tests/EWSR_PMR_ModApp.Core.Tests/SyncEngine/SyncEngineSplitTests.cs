@@ -115,7 +115,7 @@ public class SyncEngineSplitTests
 
         // All mapped files are listed in FilesToBackup (executor decides whether to skip).
         Assert.Single(plan.FilesToBackup);
-        Assert.Equal("vehicles/car_a/livery.dds", plan.FilesToBackup[0]);
+        Assert.Equal("vehicles/car_a/livery.dds", plan.FilesToBackup[0].RelativeTargetPath);
 
         // One entry in MappedFiles.
         Assert.Single(plan.MappedFiles);
@@ -214,7 +214,7 @@ public class SyncEngineSplitTests
         Assert.Equal(DataRoot,  plan.DataRoot);
         Assert.Equal(2, plan.BackedUpFileCount);   // 2 non-new files
         Assert.Single(plan.NewFilesToDelete);
-        Assert.Equal("vehicles/car_a/new_skin.dds", plan.NewFilesToDelete[0]);
+        Assert.Equal("vehicles/car_a/new_skin.dds", plan.NewFilesToDelete[0].RelativeTargetPath);
     }
 
     // ── W4-4: ExecuteUninstallAsync → FakeFileSystem state ───────────────────

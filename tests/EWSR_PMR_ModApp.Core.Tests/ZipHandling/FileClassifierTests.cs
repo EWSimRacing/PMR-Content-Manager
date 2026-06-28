@@ -2,7 +2,8 @@
 // Covers: UnsafeFile, DisplayOnly (docs + images at root/preview/images folders),
 //         Install (game formats inside data/), NoPathMatch (artifacts, OS junk, nested
 //         archives, game formats outside data/), MetaFile, modinfo.json overrides
-//         (SkipFiles glob, DisplayFiles, Files), edge cases, and case-insensitive matching.
+//         (SkipFiles glob, DisplayFiles, Files), HookScript (ps1/bat declared in Hooks),
+//         edge cases, and case-insensitive matching.
 
 using Xunit;
 using EWSR_PMR_ModApp.Core.ZipHandling;
@@ -264,4 +265,77 @@ public class FileClassifierTests
     [InlineData("helper.DLL")]
     public void UnsafeExtension_UpperCase_IsUnsafeFile(string fileName)
         => Assert.Equal(SkipCategory.UnsafeFile, Classify(fileName));
+
+    // ── HookScript — declared in modinfo.json hooks block ───────────────────────
+
+    [Fact]
+    public void Ps1_DeclaredAsPostInstallHook_IsHookScript()
+    {
+        var modInfo = new ModInfo
+        {
+            Hooks = new ModHooks
+            {
+                PostInstall = new HookScript { Script = "EWS_Setup_RaceIQ.ps1" }
+            }
+        };
+        Assert.Equal(SkipCategory.HookScript, Classify("EWS_Setup_RaceIQ.ps1", modInfo));
+    }
+
+    [Fact]
+    public void Ps1_DeclaredAsPostUninstallHook_IsHookScript()
+    {
+        var modInfo = new ModInfo
+        {
+            Hooks = new ModHooks
+            {
+                PostUninstall = new HookScript { Script = "EWS_Cleanup_RaceIQ.ps1" }
+            }
+        };
+        Assert.Equal(SkipCategory.HookScript, Classify("EWS_Cleanup_RaceIQ.ps1", modInfo));
+    }
+
+    [Fact]
+    public void Ps1_HookDeclaration_CaseInsensitiveMatch()
+    {
+        var modInfo = new ModInfo
+        {
+            Hooks = new ModHooks
+            {
+                PostInstall = new HookScript { Script = "EWS_SETUP_RaceIQ.PS1" }
+            }
+        };
+        // The zip entry uses lowercase — should still match the hook declaration.
+        Assert.Equal(SkipCategory.HookScript, Classify("EWS_SETUP_RaceIQ.PS1", modInfo));
+    }
+
+    [Fact]
+    public void Ps1_NotDeclaredInHooks_RemainsUnsafeFile()
+    {
+        // A .ps1 that is NOT listed as a hook must still be blocked.
+        var modInfo = new ModInfo
+        {
+            Hooks = new ModHooks
+            {
+                PostInstall = new HookScript { Script = "other_setup.ps1" }
+            }
+        };
+        Assert.Equal(SkipCategory.UnsafeFile, Classify("install.ps1", modInfo));
+    }
+
+    [Fact]
+    public void Ps1_NoModinfo_RemainsUnsafeFile()
+        => Assert.Equal(SkipCategory.UnsafeFile, Classify("install.ps1"));
+
+    [Fact]
+    public void Bat_DeclaredAsHook_IsHookScript()
+    {
+        var modInfo = new ModInfo
+        {
+            Hooks = new ModHooks
+            {
+                PostInstall = new HookScript { Script = "scripts/setup.bat" }
+            }
+        };
+        Assert.Equal(SkipCategory.HookScript, Classify("scripts/setup.bat", modInfo));
+    }
 }

@@ -204,6 +204,39 @@ public class MappingResolverTests
             && m.MappingMethod      == MappingMethod.ModInfo);
     }
 
+    [Fact]
+    public void ModInfoGameRootFiles_MapToGameTargetRoot()
+    {
+        var entries = Entries("shared/starmap.dds");
+        var modInfo = new ModInfo
+        {
+            SchemaVersion = 2,
+            GameRootFiles = new Dictionary<string, string>
+            {
+                ["shared/starmap.dds"] = "shared/starmap.dds"
+            }
+        };
+
+        var plan = _resolver.Resolve(entries, FakeDataRoot, [], modInfo);
+
+        var mapped = Assert.Single(plan.Mapped);
+        Assert.Equal("shared/starmap.dds", mapped.RelativeTargetPath);
+        Assert.Equal(TargetRoot.Game, mapped.TargetRoot);
+        Assert.Equal(MappingMethod.ModInfo, mapped.MappingMethod);
+    }
+
+    [Fact]
+    public void TopLevelSharedPath_WithoutModInfo_DoesNotHeuristicallyMapIntoDataShared()
+    {
+        var entries = Entries("shared/starmap.dds");
+        var dataIndex = new[] { "shared/starmap.dds" };
+
+        var plan = _resolver.Resolve(entries, FakeDataRoot, dataIndex);
+
+        Assert.Empty(plan.Mapped);
+        Assert.Single(plan.Unmatched);
+    }
+
     // ── Edge: modinfo.json entry itself is never treated as a mod file ────────────
 
     [Fact]

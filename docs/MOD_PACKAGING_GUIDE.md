@@ -41,6 +41,7 @@ The mod manager categorizes every file in your zip:
 
 ### ✅ Installed (copied to game)
 - Files inside `data/` that match the game's folder structure
+- Files explicitly listed in `modinfo.json` `gameRootFiles` when the target is allowlisted (currently `shared/`)
 - Standard mod formats: `.xml`, `.hadron`, `.tweakers`, `.i3d`, `.dds`
 - `.png`/`.jpg` files inside valid game texture paths
 
@@ -93,7 +94,7 @@ mod.zip
 │           └── weather.xml
 ```
 
-The engine detects `tracks/` is a valid `data/` child and overlays correctly.
+The engine detects `tracks/` is a valid `data/` child and overlays correctly. A top-level `shared/` folder is not mapped by this heuristic; use `gameRootFiles` for game-root assets.
 
 ### Option C: Flat files (works but not recommended)
 
@@ -243,6 +244,7 @@ Even this minimal manifest helps — the mod manager uses it for display name an
 | `minGameVersion` | No | Warns user if their game is older. |
 | `tags` | No | For future filtering/search. |
 | `files` | No | Explicit install mapping. Omit to use heuristics. |
+| `gameRootFiles` | No | Schema v2 map for allowlisted game-root files such as `shared/starmap.dds`. |
 | `displayFiles` | No | Files to show in UI but not install. |
 | `skipFiles` | No | Glob patterns for files to ignore completely. |
 | `dependencies` | No | Other mods required (future feature). |
@@ -255,6 +257,23 @@ Use explicit `files` mapping when:
 - You're distributing multiple variants in one zip
 
 For most mods, omit `files` and let the engine use path-overlay.
+
+### Installing Game-Root Files (`shared/`)
+
+Some PMR assets live beside `data/`, for example `{game}/shared/starmap.dds`. These require `schemaVersion: 2` and an explicit `gameRootFiles` map:
+
+```json
+{
+  "schemaVersion": 2,
+  "name": "Night Sky",
+  "version": "1.0.0",
+  "gameRootFiles": {
+    "shared/starmap.dds": "shared/starmap.dds"
+  }
+}
+```
+
+Only allowlisted game-root folders are accepted. Currently that means `shared/`; targets under `data/`, `x64/`, `updater/`, `sdk/`, `profileTemplate/`, rooted paths, and `..` traversal are rejected.
 
 ---
 

@@ -75,6 +75,22 @@ public static class FileClassifier
             return SkipCategory.DisplayOnly;
         }
 
+        // 2b. Hook scripts explicitly declared in modinfo.json — classify before the unsafe block
+        //     so .ps1 / .bat scripts listed as hooks are not blindly rejected.
+        if (modInfo?.Hooks is { } hooks)
+        {
+            bool isPostInstall   = hooks.PostInstall?.Script   is { } pi &&
+                                   string.Equals(pi,   zipPath, StringComparison.OrdinalIgnoreCase);
+            bool isPostUninstall = hooks.PostUninstall?.Script is { } pu &&
+                                   string.Equals(pu,   zipPath, StringComparison.OrdinalIgnoreCase);
+
+            if (isPostInstall || isPostUninstall)
+            {
+                reason = "Declared hook script — cached for execution, not installed to game directory";
+                return SkipCategory.HookScript;
+            }
+        }
+
         // 3. Unsafe extensions — always blocked
         if (IsUnsafe(ext))
         {
@@ -98,7 +114,15 @@ public static class FileClassifier
         }
 
         // 5b. modinfo.json explicit Files mapping → Install (wins before extension policy)
-        if (modInfo?.Files is { Count: > 0 } && modInfo.Files.ContainsKey(zipPath))
+        if (modInfo?.Files is { Count: > 0 }
+            && (modInfo.Files.ContainsKey(zipPath) || modInfo.Files.ContainsKey(fileName)))
+        {
+            reason = null;
+            return SkipCategory.Install;
+        }
+
+        if (modInfo is { SchemaVersion: >= 2, GameRootFiles.Count: > 0 }
+            && (modInfo.GameRootFiles.ContainsKey(zipPath) || modInfo.GameRootFiles.ContainsKey(fileName)))
         {
             reason = null;
             return SkipCategory.Install;

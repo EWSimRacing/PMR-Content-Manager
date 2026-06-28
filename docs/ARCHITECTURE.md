@@ -15,7 +15,7 @@ The app is split into two assemblies:
 
 ### 1. SyncEngine (`Core/SyncEngine/`)
 The orchestrator. Coordinates install, uninstall, and the key "re-apply" flow:
-- **Install:** Extract zip → map files to game paths → backup originals → copy mod files → update manifest.
+- **Install:** Extract zip → map files to data-root or allowlisted game-root paths → backup originals → copy mod files → update manifest.
 - **Uninstall:** Restore originals from backup → remove manifest entry.
 - **Re-apply (update recovery):** On app launch or file-watch trigger, compare manifest hashes against on-disk files. If a game update reverted modded files, re-copy from the stored mod payload.
 
@@ -99,7 +99,7 @@ The UI displays:
 
 ### 5. Backup (`Core/Backup/`)
 - Before any mod install, back up the original game files that will be overwritten.
-- Backups stored in a structured folder under app data with manifest cross-reference.
+- Backups are root-aware: `backups/{modId}/__data__/...` for data-root files and `backups/{modId}/__game__/...` for allowlisted game-root files.
 - Restore-on-uninstall and bulk "restore all originals" for clean slate.
 - Prune stale backups when mods are removed.
 
@@ -148,7 +148,7 @@ The UI displays:
 
 ### Decision: Hybrid (option C) — path-overlay primary, filename-index fallback
 
-**Install-target root:** `C:\Program Files\Project Motor Racing\data` (resolved by GameDetection; manual override supported).
+**Install-target roots:** `C:\Program Files\Project Motor Racing\data` for normal mods and `C:\Program Files\Project Motor Racing` for explicit allowlisted game-root files.
 
 #### Primary strategy — mirror zip structure (path overlay)
 
@@ -156,6 +156,7 @@ Most racing-sim mod authors package zips that preserve the relative path under t
 
 1. **Zip contains a `data/` root folder** — strip it and overlay contents onto the data root.
 2. **Zip starts with a sub-path that exists under `data/`** (e.g. `vehicles/…`, `tracks/…`) — overlay directly onto data root.
+3. **Game-root files** are never guessed by heuristics. A top-level `shared/` path only installs to the game root through `modinfo.json` schema v2 `gameRootFiles`.
 
 Detection heuristic (in order):
 - If the zip's top-level entry is exactly `data/` → strip it, overlay remainder.
@@ -190,6 +191,7 @@ If the zip is flat (no meaningful folder structure), the engine indexes every fi
     {
       "relativeTargetPath": "vehicles/car_a/livery.dds",
       "sourcePathInZip": "data/vehicles/car_a/livery.dds",
+      "targetRoot": "Data",
       "mappingMethod": "path-overlay | filename-index | modinfo",
       "originalFileHash": "SHA256 of the game's original file (null if new file)",
       "installedFileHash": "SHA256 of the mod file written to disk",
@@ -270,6 +272,7 @@ The app accepts (but never requires) a manifest file named `modinfo.json` at the
 | `minGameVersion` | string | No | Minimum PMR version required. Engine warns if game is older. |
 | `tags` | string[] | No | Categorization tags for future filtering. |
 | `files` | object | No | Map of `pathInZip` → `"install"` or target path override. If omitted, heuristics run. |
+| `gameRootFiles` | object | No | Schema v2 map of `pathInZip` → game-root-relative target. Currently only `shared/...` is allowed. |
 | `displayFiles` | object | No | Files shown in UI but not installed. Keys are paths in zip. |
 | `skipFiles` | string[] | No | Glob patterns for files to skip entirely (not shown, not installed). |
 | `dependencies` | object[] | No | Other mods this mod requires. Engine warns if missing. |
@@ -281,6 +284,21 @@ The app accepts (but never requires) a manifest file named `modinfo.json` at the
   - `"install"` — use path-overlay/heuristic for target location.
   - A string path — explicit target path under `data/` (overrides heuristics).
   - Omitting a file from `files` when `files` is present means that file uses heuristics.
+
+  ##### `gameRootFiles` Object Behavior (schema v2)
+
+  `gameRootFiles` is the only way to install outside `data/`. Each key is a zip path and each value is relative to the game root, not the data root:
+
+  ```json
+  {
+    "schemaVersion": 2,
+    "gameRootFiles": {
+      "shared/starmap.dds": "shared/starmap.dds"
+    }
+  }
+  ```
+
+  The security gate is default-deny. Targets must be relative, must not contain `..`, must stay under the game root, must not be under `data/`, and must start with an allowlisted folder (`shared/` only today). Reserved roots (`data`, `x64`, `updater`, `sdk`, `profileTemplate`) are rejected.
 
 ##### `displayFiles` Object
 

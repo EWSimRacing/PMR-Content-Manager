@@ -10,5 +10,6 @@ public enum SkipCategory
     UserExcluded,        // User blocked this file
     AmbiguousPending,    // Multiple possible targets — needs user confirmation
     Collision,           // Two zip entries target same destination
-    UnsafeFile           // Executable or system file — never auto-install
+    UnsafeFile,          // Executable or system file — never auto-install
+    HookScript           // Lifecycle hook script declared in modinfo.json — cached, not installed to game
 }

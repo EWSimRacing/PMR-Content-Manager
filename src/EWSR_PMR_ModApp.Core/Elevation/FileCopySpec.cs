@@ -1,3 +1,5 @@
+using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
+
 namespace EWSR_PMR_ModApp.Core.Elevation;
 
 /// <summary>Describes a single source → target file copy operation inside a <see cref="WritePlanRequest"/>.</summary>
@@ -14,4 +16,7 @@ public sealed class FileCopySpec
     /// (e.g. <c>vehicles/car_a/livery.dds</c>). Must not be rooted or contain <c>..</c>.
     /// </summary>
     public string RelativeTargetPath { get; init; } = string.Empty;
+
+    /// <summary>Root that <see cref="RelativeTargetPath"/> is relative to.</summary>
+    public TargetRoot TargetRoot { get; init; } = TargetRoot.Data;
 }

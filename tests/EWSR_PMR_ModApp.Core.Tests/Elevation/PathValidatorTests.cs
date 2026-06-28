@@ -12,6 +12,7 @@ namespace EWSR_PMR_ModApp.Core.Tests.Elevation;
 public class PathValidatorTests
 {
     private const string DataRoot        = @"C:\game\data";
+    private const string GameRoot        = @"C:\game";
     private const string FakeAppDataRoot = @"C:\Users\TestUser\AppData\Roaming\EWSR_PMR_ModApp";
 
     // ── IsUnderDataRoot: accept legitimate relative paths ─────────────────────
@@ -162,5 +163,43 @@ public class PathValidatorTests
         // OrdinalIgnoreCase comparison must accept the same path in a different case.
         string source = FakeAppDataRoot.ToUpperInvariant() + @"\staging\file.dds";
         Assert.True(PathValidator.IsAllowedSource(source, FakeAppDataRoot));
+    }
+
+    [Theory]
+    [InlineData(@"shared\starmap.dds")]
+    [InlineData("shared/moon_diffuse.dds")]
+    [InlineData("SHARED/Starmap.dds")]
+    public void IsAllowedGameRootTarget_AllowedSharedChild_ReturnsTrue(string relative)
+    {
+        Assert.True(PathValidator.IsAllowedGameRootTarget(GameRoot, DataRoot, relative));
+    }
+
+    [Theory]
+    [InlineData(@"C:\game\shared\starmap.dds")]
+    [InlineData(@"D:\mods\shared\starmap.dds")]
+    public void IsAllowedGameRootTarget_RootedPath_ReturnsFalse(string relative)
+    {
+        Assert.False(PathValidator.IsAllowedGameRootTarget(GameRoot, DataRoot, relative));
+    }
+
+    [Theory]
+    [InlineData(@"shared\..\x64\launcher.exe")]
+    [InlineData(@"..\shared\starmap.dds")]
+    [InlineData(@"shared\..\shared\starmap.dds")]
+    public void IsAllowedGameRootTarget_DotDotTraversal_ReturnsFalse(string relative)
+    {
+        Assert.False(PathValidator.IsAllowedGameRootTarget(GameRoot, DataRoot, relative));
+    }
+
+    [Theory]
+    [InlineData(@"data\vehicles\car.dds")]
+    [InlineData(@"x64\launcher.exe")]
+    [InlineData(@"updater\update.exe")]
+    [InlineData(@"sdk\tool.dll")]
+    [InlineData(@"profileTemplate\profile.xml")]
+    [InlineData(@"PMR.exe")]
+    public void IsAllowedGameRootTarget_ReservedOrRootTarget_ReturnsFalse(string relative)
+    {
+        Assert.False(PathValidator.IsAllowedGameRootTarget(GameRoot, DataRoot, relative));
     }
 }
