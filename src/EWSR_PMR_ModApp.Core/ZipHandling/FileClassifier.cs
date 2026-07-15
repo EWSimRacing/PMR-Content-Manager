@@ -25,7 +25,7 @@ public static class FileClassifier
 
     private static readonly HashSet<string> GameDataExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".xml", ".hadron", ".tweakers", ".i3d", ".dds", ".ini", ".cfg", ".bin", ".lut", ".json", ".eval"
+        ".xml", ".hadron", ".tweakers", ".i3d", ".dds", ".ini", ".cfg", ".bin", ".lut", ".json", ".eval", ".tdef"
     };
 
     private static readonly HashSet<string> PackagingArtifactExtensions = new(StringComparer.OrdinalIgnoreCase)
