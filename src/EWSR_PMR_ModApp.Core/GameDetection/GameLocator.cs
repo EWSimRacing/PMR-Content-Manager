@@ -5,13 +5,25 @@ using EWSR_PMR_ModApp.Core.Abstractions;
 namespace EWSR_PMR_ModApp.Core.GameDetection;
 
 /// <summary>
-/// Implements <see cref="IGameLocator"/> with a three-tier fallback strategy:
-/// user config → default path → Steam detection.
+/// Implements <see cref="IGameLocator"/> with a four-tier fallback strategy:
+/// PMR junction → user config → default path → Steam detection.
 /// </summary>
+/// <remarks>
+/// PMR creates an NTFS junction at <c>%LOCALAPPDATA%\PMR_data</c> pointing to the game's
+/// actual <c>data\</c> directory. The game engine reads from this junction path, so it is
+/// the most reliable way to locate the data root regardless of install location.
+/// </remarks>
 public sealed class GameLocator : IGameLocator
 {
     private const string DefaultDataRoot   = @"C:\Program Files\Project Motor Racing\data";
     private const string GameFolderName    = "Project Motor Racing";
+
+    /// <summary>
+    /// PMR creates this junction at <c>%LOCALAPPDATA%\PMR_data</c> pointing to the actual
+    /// game data directory. The game engine reads data through this path.
+    /// </summary>
+    private static readonly string PmrJunctionPath =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PMR_data");
 
     // Sub-folders that must exist under the data root for it to be considered valid.
     private static readonly string[] KnownDataSubfolders =
@@ -29,20 +41,49 @@ public sealed class GameLocator : IGameLocator
     {
         ct.ThrowIfCancellationRequested();
 
-        // (a) User-configured path has highest priority.
-        if (!string.IsNullOrWhiteSpace(userConfiguredPath))
+        // (a) PMR junction — the game engine reads from %LOCALAPPDATA%\PMR_data which is a
+        //     junction pointing to the real data directory. This is the most reliable source
+        //     because it matches exactly where the game reads from.
+        string? junctionTarget = TryResolveJunction();
+        if (junctionTarget is not null && ValidateDataRoot(junctionTarget))
         {
-            return ValidateDataRoot(userConfiguredPath)
-                ? Found(userConfiguredPath, LocationSource.UserConfigured)
-                : GameLocatorResult.NotFound(
-                    $"User-configured path '{userConfiguredPath}' does not exist or is not a valid data folder.");
+            var result = Found(junctionTarget, LocationSource.JunctionResolved);
+
+            // If the user configured a DIFFERENT path, warn them.
+            if (!string.IsNullOrWhiteSpace(userConfiguredPath)
+                && !PathsAreEquivalent(userConfiguredPath, junctionTarget))
+            {
+                return result with
+                {
+                    Warning = $"Your configured path '{userConfiguredPath}' differs from where the game " +
+                              $"actually reads data ({junctionTarget}). Using the game's active data path."
+                };
+            }
+
+            return result;
         }
 
-        // (b) Hard-coded default.
+        // (b) User-configured path — if the junction is missing, fall back to manual config.
+        if (!string.IsNullOrWhiteSpace(userConfiguredPath))
+        {
+            if (ValidateDataRoot(userConfiguredPath))
+                return Found(userConfiguredPath, LocationSource.UserConfigured);
+
+            // Try appending \data in case user pointed to the game root.
+            string withData = Path.Combine(userConfiguredPath, "data");
+            if (ValidateDataRoot(withData))
+                return Found(withData, LocationSource.UserConfigured);
+
+            var detail = ValidateDataRootDetailed(userConfiguredPath);
+            return GameLocatorResult.NotFound(
+                detail.Reason ?? $"User-configured path '{userConfiguredPath}' is not a valid data folder.");
+        }
+
+        // (c) Hard-coded default.
         if (ValidateDataRoot(DefaultDataRoot))
             return Found(DefaultDataRoot, LocationSource.DefaultPath);
 
-        // (c) Steam detection — best-effort, never throws.
+        // (d) Steam detection — best-effort, never throws.
         string? steamPath = await TryDetectViaSteamAsync(ct).ConfigureAwait(false);
         if (steamPath is not null && ValidateDataRoot(steamPath))
             return Found(steamPath, LocationSource.SteamDetected);
@@ -60,10 +101,62 @@ public sealed class GameLocator : IGameLocator
         return KnownDataSubfolders.Any(sub => _fs.DirectoryExists(Path.Combine(path, sub)));
     }
 
+    public DataRootValidation ValidateDataRootDetailed(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return new DataRootValidation(false, path ?? "", false, [], KnownDataSubfolders);
+
+        bool exists = _fs.DirectoryExists(path);
+        if (!exists)
+            return new DataRootValidation(false, path, false, [], KnownDataSubfolders);
+
+        var found = KnownDataSubfolders
+            .Where(sub => _fs.DirectoryExists(Path.Combine(path, sub)))
+            .ToList();
+        var missing = KnownDataSubfolders
+            .Where(sub => !_fs.DirectoryExists(Path.Combine(path, sub)))
+            .ToList();
+
+        return new DataRootValidation(found.Count > 0, path, true, found, missing);
+    }
+
     public bool CanWriteDataRoot(string dataRoot) => _fs.CanWriteDirectory(dataRoot);
 
     private static GameLocatorResult Found(string dataRoot, LocationSource source) =>
         new(true, dataRoot, Directory.GetParent(dataRoot)?.FullName, source);
+
+    // -------------------------------------------------------------------------
+    // PMR junction resolution
+    // -------------------------------------------------------------------------
+
+    private string? TryResolveJunction()
+    {
+        try
+        {
+            // First check if the junction path exists and is a reparse point.
+            string? target = _fs.ResolveJunctionTarget(PmrJunctionPath);
+            if (target is not null)
+                return target;
+
+            // Fall back: even if it's not a reparse point, PMR_data could be a real directory
+            // (e.g. user copied data there). Check if it's a valid data root directly.
+            if (_fs.DirectoryExists(PmrJunctionPath))
+                return PmrJunctionPath;
+        }
+        catch
+        {
+            // Junction resolution is best-effort.
+        }
+
+        return null;
+    }
+
+    private static bool PathsAreEquivalent(string path1, string path2)
+    {
+        string a = Path.GetFullPath(path1).TrimEnd(Path.DirectorySeparatorChar);
+        string b = Path.GetFullPath(path2).TrimEnd(Path.DirectorySeparatorChar);
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
 
     // -------------------------------------------------------------------------
     // Steam detection helpers

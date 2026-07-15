@@ -33,4 +33,11 @@ public interface IFileSystem
     /// Returns false if the directory does not exist or the write is denied.
     /// </summary>
     bool CanWriteDirectory(string path);
+
+    /// <summary>
+    /// If <paramref name="path"/> is a junction (mount point) or directory symlink,
+    /// returns the resolved target path. Returns <c>null</c> if the path is not a
+    /// reparse point or does not exist.
+    /// </summary>
+    string? ResolveJunctionTarget(string path);
 }

@@ -112,6 +112,21 @@ public sealed class FakeFileSystem : IFileSystem
 
     public bool CanWriteDirectory(string path) => _canWrite && DirectoryExists(path);
 
+    private readonly Dictionary<string, string> _junctions = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Registers a fake junction mapping for testing.</summary>
+    public void AddJunction(string junctionPath, string targetPath)
+    {
+        _junctions[Norm(junctionPath)] = Norm(targetPath);
+        AddDirectory(junctionPath);
+    }
+
+    public string? ResolveJunctionTarget(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return _junctions.TryGetValue(Norm(path), out var target) ? target : null;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string Norm(string path) =>

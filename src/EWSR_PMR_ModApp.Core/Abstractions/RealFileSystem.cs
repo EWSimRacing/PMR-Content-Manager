@@ -50,4 +50,22 @@ public sealed class RealFileSystem : IFileSystem
             return false;
         }
     }
+
+    public string? ResolveJunctionTarget(string path)
+    {
+        try
+        {
+            var info = new DirectoryInfo(path);
+            if (!info.Exists) return null;
+            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return null;
+
+            // ResolveLinkTarget follows the junction/symlink to its final target.
+            var target = info.ResolveLinkTarget(returnFinalTarget: true);
+            return target?.FullName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

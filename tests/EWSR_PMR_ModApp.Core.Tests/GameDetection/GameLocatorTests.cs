@@ -241,4 +241,84 @@ public class GameLocatorTests
 
         Assert.False(locator.CanWriteDataRoot(DefaultDataRoot));
     }
+
+    // ── PMR Junction resolution ─────────────────────────────────────────────────
+
+    private static string JunctionPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PMR_data");
+
+    [Fact]
+    public async Task JunctionExists_ResolvesToTarget_TakesPrecedenceOverEverything()
+    {
+        const string junctionTarget = @"D:\Games\Project Motor Racing\data";
+        var fs = FsWithValidPath(DefaultDataRoot, junctionTarget);
+        fs.AddJunction(JunctionPath, junctionTarget);
+        var locator = new GameLocator(fs);
+
+        var result = await locator.LocateAsync(userConfiguredPath: CustomPath);
+
+        Assert.True(result.Found);
+        Assert.Equal(junctionTarget, result.DataRoot);
+        Assert.Equal(LocationSource.JunctionResolved, result.Source);
+    }
+
+    [Fact]
+    public async Task JunctionExists_UserConfigMatchesTarget_NoWarning()
+    {
+        var fs = FsWithValidPath(DefaultDataRoot);
+        fs.AddJunction(JunctionPath, DefaultDataRoot);
+        var locator = new GameLocator(fs);
+
+        var result = await locator.LocateAsync(userConfiguredPath: DefaultDataRoot);
+
+        Assert.True(result.Found);
+        Assert.Equal(DefaultDataRoot, result.DataRoot);
+        Assert.Null(result.Warning);
+    }
+
+    [Fact]
+    public async Task JunctionExists_UserConfigDiffers_WarningIssued()
+    {
+        const string junctionTarget = @"C:\Program Files\Project Motor Racing\data";
+        const string wrongPath = @"C:\Project Motor Racing\data";
+        var fs = FsWithValidPath(junctionTarget, wrongPath);
+        fs.AddJunction(JunctionPath, junctionTarget);
+        var locator = new GameLocator(fs);
+
+        var result = await locator.LocateAsync(userConfiguredPath: wrongPath);
+
+        Assert.True(result.Found);
+        Assert.Equal(junctionTarget, result.DataRoot);
+        Assert.NotNull(result.Warning);
+        Assert.Contains(wrongPath, result.Warning);
+    }
+
+    [Fact]
+    public async Task NoJunction_FallsBackToUserConfiguredPath()
+    {
+        var fs = FsWithValidPath(CustomPath);
+        var locator = new GameLocator(fs);
+
+        var result = await locator.LocateAsync(userConfiguredPath: CustomPath);
+
+        Assert.True(result.Found);
+        Assert.Equal(CustomPath, result.DataRoot);
+        Assert.Equal(LocationSource.UserConfigured, result.Source);
+    }
+
+    [Fact]
+    public async Task JunctionExistsButTargetInvalid_FallsBackToUserConfig()
+    {
+        const string badTarget = @"Z:\Nonexistent\data";
+        var fs = FsWithValidPath(CustomPath);
+        // Junction points to a path that doesn't validate (no known subfolders)
+        fs.AddJunction(JunctionPath, badTarget);
+        var locator = new GameLocator(fs);
+
+        var result = await locator.LocateAsync(userConfiguredPath: CustomPath);
+
+        Assert.True(result.Found);
+        Assert.Equal(CustomPath, result.DataRoot);
+        Assert.Equal(LocationSource.UserConfigured, result.Source);
+    }
 }

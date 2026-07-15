@@ -6,7 +6,8 @@ public sealed record GameLocatorResult(
     string?        DataRoot,
     string?        GameRoot,
     LocationSource Source,
-    string?        FailureReason = null)
+    string?        FailureReason = null,
+    string?        Warning = null)
 {
     public static GameLocatorResult NotFound(string reason) =>
         new(false, null, null, LocationSource.NotFound, reason);
