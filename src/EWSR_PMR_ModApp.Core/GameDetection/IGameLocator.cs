@@ -11,6 +11,7 @@ public interface IGameLocator
     ///   <item>(a) <paramref name="userConfiguredPath"/> — if provided and valid.</item>
     ///   <item>(b) The default path <c>C:\Program Files\Project Motor Racing\data</c>.</item>
     ///   <item>(c) Steam library detection via libraryfolders.vdf and Windows Registry (best-effort).</item>
+    ///   <item>(d) Drive scanning — checks common game install locations on all fixed drives.</item>
     /// </list>
     /// Returns a result with <c>Found = false</c> when none of the above succeed, prompting the
     /// caller to ask the user to select the path manually.
@@ -24,6 +25,13 @@ public interface IGameLocator
     /// expected sub-folder (e.g. <c>vehicles</c>, <c>tracks</c>).
     /// </summary>
     bool ValidateDataRoot(string path);
+
+    /// <summary>
+    /// Returns detailed validation information about <paramref name="path"/>, including
+    /// which expected sub-folders are present and which are missing. Useful for producing
+    /// actionable error messages in the UI.
+    /// </summary>
+    DataRootValidation ValidateDataRootDetailed(string path);
 
     /// <summary>
     /// Returns <c>true</c> if the calling process has write access to <paramref name="dataRoot"/>.

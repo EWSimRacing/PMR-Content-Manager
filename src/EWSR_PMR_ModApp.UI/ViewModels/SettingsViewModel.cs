@@ -62,6 +62,19 @@ public sealed class SettingsViewModel : ViewModelBase
         var result = await _gameLocator.LocateAsync(
             string.IsNullOrWhiteSpace(path) ? null : path);
 
+        // If the user gave the game root (without \data), try appending \data automatically.
+        if (!result.Found && !string.IsNullOrWhiteSpace(path))
+        {
+            var withData = System.IO.Path.Combine(path!, "data");
+            var retryResult = await _gameLocator.LocateAsync(withData);
+            if (retryResult.Found)
+            {
+                result = retryResult;
+                ConfiguredPath = withData;
+                path = withData;
+            }
+        }
+
         if (!result.Found)
         {
             MessageBox.Show(
@@ -72,6 +85,19 @@ public sealed class SettingsViewModel : ViewModelBase
             return;
         }
 
+        // Show warning if junction resolved to a different path than what the user typed.
+        if (result.Warning is not null)
+        {
+            MessageBox.Show(
+                result.Warning,
+                "Path Mismatch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            // Update the displayed path to match what the game actually uses.
+            ConfiguredPath = result.DataRoot;
+        }
+
         // Persist and notify MainViewModel.
         var settings = _settingsStore.Load();
         settings.UserConfiguredGamePath = string.IsNullOrWhiteSpace(path) ? null : path;
@@ -80,9 +106,18 @@ public sealed class SettingsViewModel : ViewModelBase
         await _mainVm.ApplyDataRootAsync(result.DataRoot!);
 
         MessageBox.Show(
-            $"Game data path updated to:\n{result.DataRoot}",
+            $"Game data path updated to:\n{result.DataRoot}\n\n(Source: {FormatSource(result.Source)})",
             "Path Updated",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
     }
+
+    private static string FormatSource(LocationSource source) => source switch
+    {
+        LocationSource.JunctionResolved => "PMR game junction (auto-detected)",
+        LocationSource.UserConfigured   => "Manual configuration",
+        LocationSource.DefaultPath      => "Default install location",
+        LocationSource.SteamDetected    => "Steam library detection",
+        _                               => source.ToString()
+    };
 }
