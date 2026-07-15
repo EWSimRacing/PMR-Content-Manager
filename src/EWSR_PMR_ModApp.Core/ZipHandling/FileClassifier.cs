@@ -23,10 +23,9 @@ public static class FileClassifier
         ".png", ".jpg", ".jpeg", ".gif", ".webp"
     };
 
-    private static readonly HashSet<string> GameDataExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".xml", ".hadron", ".tweakers", ".i3d", ".dds", ".ini", ".cfg", ".bin", ".lut", ".json", ".eval", ".tdef"
-    };
+    // Legacy reference list kept for documentation — the classifier now uses a denylist approach:
+    // anything inside data/ that isn't unsafe, a packaging artifact, or documentation gets installed.
+    // This avoids needing app updates whenever PMR introduces new file formats.
 
     private static readonly HashSet<string> PackagingArtifactExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -158,16 +157,12 @@ public static class FileClassifier
             return SkipCategory.NoPathMatch;
         }
 
-        // 8. Game data formats (includes .json not already handled as MetaFile)
-        if (GameDataExtensions.Contains(ext))
+        // 8. Anything else inside data/ — install it (denylist approach: if it passed
+        //    the unsafe/artifact/doc checks above, it's a valid game file)
+        if (IsInsideDataPath(zipPath))
         {
-            if (IsInsideDataPath(zipPath))
-            {
-                reason = null;
-                return SkipCategory.Install;
-            }
-            reason = $"Game data file ({ext}) is not inside a data/ path";
-            return SkipCategory.NoPathMatch;
+            reason = null;
+            return SkipCategory.Install;
         }
 
         // 9. Everything else
