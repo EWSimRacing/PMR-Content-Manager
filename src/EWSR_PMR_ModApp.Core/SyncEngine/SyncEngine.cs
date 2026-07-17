@@ -433,6 +433,14 @@ public sealed class SyncEngine : ISyncEngine
             catch { /* Non-critical — leftover scripts in AppData do not affect game state. */ }
         }
 
+        // Remove cached mod payload (best-effort — leftover payload wastes disk but doesn't harm state).
+        string payloadDir = AppPaths.PayloadDirForMod(plan.ModId);
+        if (_fs.DirectoryExists(payloadDir))
+        {
+            try { _fs.DeleteDirectory(payloadDir, recursive: true); }
+            catch { /* Non-critical — orphaned payload only wastes disk space. */ }
+        }
+
         Report(progress, "Complete", 100);
         return new UninstallResult
         {
