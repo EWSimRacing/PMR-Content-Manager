@@ -12,13 +12,13 @@
 ## Download
 
 Get the latest release from [GitHub Releases](../../releases) or [Overtake.gg](#).  
-Current version: **v1.0.1**
+Current version: **v1.3.4**
 
 ---
 
 ## How to Use
 
-1. **Download** `PMR-Content-Manager-v1.0.1-win-x64.zip` from the Releases page.
+1. **Download** `PMR-Content-Manager-v1.3.4-win-x64.zip` from the Releases page.
 2. **Extract** the zip anywhere you like (Desktop, Documents, wherever). No installer needed.
 3. **Run `PMR CM.exe`**.
    - On first launch, Windows may show **"Windows protected your PC — unrecognised app"**.  
@@ -29,7 +29,7 @@ Current version: **v1.0.1**
 7. PMR CM maps the mod files to the correct game directories, backs up your originals, and installs. A UAC prompt will appear for the write step — this is required because PMR lives in Program Files.
 8. Close any post-install warnings dialog to let **INSTALLED MODS** refresh. Click **Uninstall** to restore originals.
 
-The reviewed `Cockpit_Immersion_Audio_PMR_v1.0.3.zip` is supported by a **built-in native
+The reviewed `Cockpit_Immersion_Audio_PMR_v1.3.4.zip` is supported by a **built-in native
 audio transformation**. Drop or browse to the original ZIP: CM recognizes its exact
 SHA-256, stages modified car/shared audio XMLs, then uses its normal backups, helper,
 manifest and uninstall workflow. **None of its PowerShell or batch scripts run.**
