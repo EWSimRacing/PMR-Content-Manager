@@ -8,6 +8,10 @@ namespace EWSR_PMR_ModApp.Core.ZipHandling;
 /// </summary>
 public static class FileClassifier
 {
+    private static readonly HashSet<string> LooseGameExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".xml", ".hadron", ".tweakers", ".i3d", ".dds", ".ini", ".cfg", ".bin", ".lut", ".json", ".eval"
+    };
     private static readonly HashSet<string> UnsafeExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".sh", ".vbs", ".msi", ".reg"
@@ -165,6 +169,12 @@ public static class FileClassifier
             return SkipCategory.Install;
         }
 
+        if (LooseGameExtensions.Contains(ext))
+        {
+            reason = "Game asset candidate — requires a known relative path or existing filename match";
+            return SkipCategory.AmbiguousPending;
+        }
+
         // 9. Everything else
         reason = "No known mapping for this file type or path";
         return SkipCategory.NoPathMatch;
@@ -205,7 +215,7 @@ public static class FileClassifier
     /// (case-insensitive).
     /// </summary>
     public static bool IsInsideDataPath(string zipPath)
-        => zipPath.StartsWith("data/", StringComparison.OrdinalIgnoreCase);
+        => PackagePaths.TryDataPath(zipPath, out _, out _);
 
     /// <summary>
     /// Returns <see langword="true"/> for file extensions that are never safe to auto-install.

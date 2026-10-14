@@ -8,6 +8,15 @@ namespace EWSR_PMR_ModApp.Core.Elevation;
 /// </summary>
 public static class PathValidator
 {
+    public static bool IsSafeRelativePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath)) return false;
+        string[] segments = relativePath.Replace('\\', '/').Split('/');
+        return segments.All(s => s.Length > 0 && s != "." && s != ".."
+            && !s.EndsWith(' ') && !s.EndsWith('.')
+            && !s.Any(c => c < 32 || "<>:\"|?*".Contains(c)));
+    }
+
     private static readonly HashSet<string> ReservedGameRootDirs = new(StringComparer.OrdinalIgnoreCase)
     {
         "data", "x64", "updater", "sdk", "profileTemplate"
@@ -27,22 +36,21 @@ public static class PathValidator
     /// </remarks>
     public static bool IsUnderDataRoot(string dataRoot, string relativePath)
     {
-        if (string.IsNullOrEmpty(relativePath)) return false;
-        if (Path.IsPathRooted(relativePath))    return false;
+        if (!IsSafeRelativePath(relativePath)) return false;
 
         string normalizedRoot = Path.GetFullPath(dataRoot)
             .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
         string combined = Path.GetFullPath(Path.Combine(dataRoot, relativePath));
-        return combined.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+        return combined.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+            && !ContainsReparsePoint(dataRoot, relativePath);
     }
 
     public static bool IsAllowedGameRootTarget(string gameRoot, string dataRoot, string relativePath)
     {
         if (string.IsNullOrWhiteSpace(gameRoot)) return false;
         if (string.IsNullOrWhiteSpace(dataRoot)) return false;
-        if (string.IsNullOrEmpty(relativePath))  return false;
-        if (Path.IsPathRooted(relativePath))     return false;
+        if (!IsSafeRelativePath(relativePath))  return false;
 
         string normalizedRelative = relativePath.Replace('\\', '/').TrimStart('/');
         string[] segments = normalizedRelative
@@ -68,7 +76,8 @@ public static class PathValidator
             return false;
 
         string combinedWithSlash = combined.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return !combinedWithSlash.StartsWith(normalizedDataRoot, StringComparison.OrdinalIgnoreCase);
+        return !combinedWithSlash.StartsWith(normalizedDataRoot, StringComparison.OrdinalIgnoreCase)
+            && !ContainsReparsePoint(gameRoot, relativePath);
     }
 
     /// <summary>
@@ -88,6 +97,20 @@ public static class PathValidator
             .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         string normalizedSource = Path.GetFullPath(sourcePath);
 
-        return normalizedSource.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+        return normalizedSource.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+            && !ContainsReparsePoint(appDataRoot, Path.GetRelativePath(appDataRoot, sourcePath));
+    }
+
+    private static bool ContainsReparsePoint(string root, string relative)
+    {
+        string current = Path.GetFullPath(root);
+        foreach (string segment in new[] { string.Empty }.Concat(relative.Replace('\\', '/').Split('/')))
+        {
+            if (segment.Length > 0) current = Path.Combine(current, segment);
+            if ((File.Exists(current) || Directory.Exists(current))
+                && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                return true;
+        }
+        return false;
     }
 }

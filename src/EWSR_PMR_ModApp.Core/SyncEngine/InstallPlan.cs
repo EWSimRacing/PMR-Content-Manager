@@ -10,6 +10,7 @@ namespace EWSR_PMR_ModApp.Core.SyncEngine;
 /// </summary>
 public sealed class InstallPlan
 {
+    public string? NativePatchId { get; init; }
     /// <summary>Stable UUID for this mod installation, generated during prepare.</summary>
     public required string ModId { get; init; }
 

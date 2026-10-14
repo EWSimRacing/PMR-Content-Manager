@@ -5,10 +5,8 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- asInvoker: app starts without admin rights.
-             If the game data root requires admin access, the UI prompts the user
-             to restart elevated via a "Restart as Administrator" button that
-             relaunches the process with the 'runas' ShellExecute verb. -->
+        <!-- Keep Explorer drag/drop at normal integrity. Only the short-lived
+             requireAdministrator helper is elevated for protected game writes. -->
         <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>

@@ -34,8 +34,8 @@ public interface IGameLocator
     DataRootValidation ValidateDataRootDetailed(string path);
 
     /// <summary>
-    /// Returns <c>true</c> if the calling process has write access to <paramref name="dataRoot"/>.
-    /// NOTE: Program Files is ACL-protected — admin elevation is typically required at runtime.
+    /// Returns <c>true</c> if a new probe file can be created in <paramref name="dataRoot"/>.
+    /// This does not prove overwrite permission on existing files; use WriteAccessPolicy for writer selection.
     /// </summary>
     bool CanWriteDataRoot(string dataRoot);
 }

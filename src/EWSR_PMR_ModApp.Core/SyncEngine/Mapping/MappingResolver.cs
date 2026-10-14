@@ -20,13 +20,16 @@ public sealed class MappingResolver : IMappingResolver
         IReadOnlyList<string> dataFileIndex,
         ModInfo? modInfo = null)
     {
+        foreach (var entry in zipEntries)
+            if (!PathValidator.IsSafeRelativePath(entry.FullNameInZip))
+                throw new InvalidDataException($"Unsafe archive path rejected: {entry.FullNameInZip}");
         if (zipEntries.Count == 0)
             return new MappingPlan { Mapped = [], Ambiguous = [], Unmatched = [], Collisions = [] };
 
         // ── Strategy 1: modinfo.json ──────────────────────────────────────────
         if (modInfo is not null && (modInfo.Files.Count > 0 || (modInfo.SchemaVersion >= 2 && modInfo.GameRootFiles.Count > 0)))
         {
-            var explicitPlan = ResolveViaModInfo(zipEntries, modInfo);
+            var explicitPlan = ResolveViaModInfo(zipEntries, modInfo, dataRoot, dataFileIndex);
             if (modInfo.SchemaVersion < 2)
                 return ApplyCollisionDetection(explicitPlan);
 
@@ -40,7 +43,7 @@ public sealed class MappingResolver : IMappingResolver
             return ApplyCollisionDetection(new MappingPlan
             {
                 Mapped     = explicitPlan.Mapped.Concat(heuristicPlan.Mapped).ToList(),
-                Ambiguous  = heuristicPlan.Ambiguous,
+                Ambiguous  = explicitPlan.Ambiguous.Concat(heuristicPlan.Ambiguous).ToList(),
                 Unmatched  = heuristicPlan.Unmatched,
                 Collisions = []
             });
@@ -60,17 +63,28 @@ public sealed class MappingResolver : IMappingResolver
     // ─────────────────────────────────────────────────────────────────────────
 
     private static MappingPlan ResolveViaModInfo(
-        IReadOnlyList<ZipEntryInfo> zipEntries, ModInfo modInfo)
+        IReadOnlyList<ZipEntryInfo> zipEntries, ModInfo modInfo, string dataRoot, IReadOnlyList<string> dataFileIndex)
     {
         var mapped    = new List<FileMappingResult>();
         var unmatched = new List<ZipEntryInfo>();
+        var ambiguous = new List<AmbiguousMapping>();
 
         foreach (var entry in zipEntries)
         {
-            if (IsModInfoFile(entry.FileName)) continue;
+            if (IsModInfoFile(entry)) continue;
 
             if (TryResolveExplicitTarget(modInfo.Files, entry, out string? target))
             {
+                if (string.Equals(target, "install", StringComparison.OrdinalIgnoreCase))
+                {
+                    var automatic = TryPathOverlay([entry], dataRoot, dataFileIndex)
+                        ?? ResolveViaFilenameIndex([entry], dataFileIndex);
+                    mapped.AddRange(automatic.Mapped);
+                    unmatched.AddRange(automatic.Unmatched);
+                    ambiguous.AddRange(automatic.Ambiguous);
+                    continue;
+                }
+                ValidateExplicitTarget(target);
                 mapped.Add(new FileMappingResult
                 {
                     ZipEntry           = entry,
@@ -80,6 +94,7 @@ public sealed class MappingResolver : IMappingResolver
             }
             else if (modInfo.SchemaVersion >= 2 && TryResolveExplicitTarget(modInfo.GameRootFiles, entry, out target))
             {
+                ValidateExplicitTarget(target);
                 mapped.Add(new FileMappingResult
                 {
                     ZipEntry           = entry,
@@ -94,7 +109,7 @@ public sealed class MappingResolver : IMappingResolver
             }
         }
 
-        return new MappingPlan { Mapped = mapped, Ambiguous = [], Unmatched = unmatched, Collisions = [] };
+        return new MappingPlan { Mapped = mapped, Ambiguous = ambiguous, Unmatched = unmatched, Collisions = [] };
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -106,82 +121,57 @@ public sealed class MappingResolver : IMappingResolver
         string dataRoot,
         IReadOnlyList<string> dataFileIndex)
     {
-        var topLevelDirs = zipEntries
-            .Select(e => GetTopLevelDir(e.FullNameInZip))
-            .Where(d => d is not null)
-            .Select(d => d!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        bool IsKnownDir(string dir) => Directory.Exists(Path.Combine(dataRoot, dir))
+            || dataFileIndex.Any(f => f.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase));
+        var prefixes = zipEntries.Where(e => GetTopLevelDir(e.FullNameInZip) is { } dir
+                && !IsKnownDir(dir) && !string.Equals(dir, "shared", StringComparison.OrdinalIgnoreCase))
+            .Select(e => PackagePaths.TryDataPath(e.FullNameInZip, out var prefix, out _) ? prefix : null)
+            .Where(p => p is not null && !string.Equals(p, "data/", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        string? wrapper = prefixes.Count == 1 ? prefixes[0] : null;
+        // Unknown directory layouts must not be silently stripped alongside a wrapper.
+        if (wrapper is not null && zipEntries.Any(e => GetTopLevelDir(e.FullNameInZip) is not null
+            && !e.FullNameInZip.StartsWith(wrapper, StringComparison.OrdinalIgnoreCase)
+            && !e.FullNameInZip.StartsWith("data/", StringComparison.OrdinalIgnoreCase)))
+            wrapper = null;
 
-        // Variant A: Zip root is exactly "data/" — strip it and overlay the remainder.
-        bool hasDataRoot = topLevelDirs.Count == 1
-            && string.Equals(topLevelDirs[0], "data", StringComparison.OrdinalIgnoreCase);
-
-        if (hasDataRoot)
-            return BuildOverlayPlan(zipEntries, StripLeadingSegment, MappingMethod.PathOverlay);
-
-        // Variant B: Every top-level zip directory matches a known child of the data root.
-        if (topLevelDirs.Any(dir => string.Equals(dir, "shared", StringComparison.OrdinalIgnoreCase)))
-            return null;
-
-        // Variant B: Every top-level zip directory matches a known child of the data root.
-        if (topLevelDirs.Count > 0 && topLevelDirs.All(dir =>
-                Directory.Exists(Path.Combine(dataRoot, dir))
-                || dataFileIndex.Any(f =>
-                    f.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase))))
-        {
-            return BuildOverlayPlan(zipEntries, IdentityTransform, MappingMethod.PathOverlay);
-        }
-
-        return null; // Neither variant matched; fall through to filename-index.
-    }
-
-    private static MappingPlan BuildOverlayPlan(
-        IReadOnlyList<ZipEntryInfo> zipEntries,
-        Func<string, string> pathTransform,
-        MappingMethod method)
-    {
-        var mapped    = new List<FileMappingResult>();
-        var unmatched = new List<ZipEntryInfo>();
-
+        var mapped = new List<FileMappingResult>();
+        var remaining = new List<ZipEntryInfo>();
         foreach (var entry in zipEntries)
         {
-            if (IsModInfoFile(entry.FileName)) continue;
+            string? relative = null;
+            bool anchored = PackagePaths.TryDataPath(entry.FullNameInZip, out var prefix, out var dataRelative);
+            if (anchored && string.Equals(prefix, "data/", StringComparison.OrdinalIgnoreCase))
+                relative = dataRelative;
+            else if (GetTopLevelDir(entry.FullNameInZip) is { } dir
+                && !string.Equals(dir, "shared", StringComparison.OrdinalIgnoreCase)
+                && IsKnownDir(dir))
+                relative = entry.FullNameInZip;
+            else if (anchored && string.Equals(prefix, wrapper, StringComparison.OrdinalIgnoreCase))
+                relative = dataRelative;
 
-            string relative = Normalize(pathTransform(entry.FullNameInZip));
-            if (string.IsNullOrEmpty(relative))
+            if (relative is null) remaining.Add(entry);
+            else mapped.Add(new FileMappingResult
             {
-                unmatched.Add(entry);
-                continue;
-            }
-
-            mapped.Add(new FileMappingResult
-            {
-                ZipEntry           = entry,
-                RelativeTargetPath = relative,
-                MappingMethod      = method
+                ZipEntry = entry, RelativeTargetPath = Normalize(relative), MappingMethod = MappingMethod.PathOverlay
             });
         }
-
-        return new MappingPlan { Mapped = mapped, Ambiguous = [], Unmatched = unmatched, Collisions = [] };
+        if (mapped.Count == 0) return null;
+        var fallback = ResolveViaFilenameIndex(remaining, dataFileIndex);
+        return new MappingPlan
+        {
+            Mapped = mapped.Concat(fallback.Mapped).ToList(), Ambiguous = fallback.Ambiguous,
+            Unmatched = fallback.Unmatched, Collisions = []
+        };
     }
-
-    private static string StripLeadingSegment(string zipPath)
-    {
-        // "data/vehicles/car_a/livery.dds"  →  "vehicles/car_a/livery.dds"
-        int slash = zipPath.IndexOf('/');
-        return slash >= 0 ? zipPath[(slash + 1)..] : string.Empty;
-    }
-
-    private static string IdentityTransform(string zipPath) => zipPath;
 
     private static bool TryResolveExplicitTarget(
         Dictionary<string, string> map,
         ZipEntryInfo entry,
         out string target)
     {
-        if (map.TryGetValue(entry.FileName, out string? byName)
-            || map.TryGetValue(entry.FullNameInZip, out byName))
+        if (map.TryGetValue(entry.FullNameInZip, out string? byName)
+            || map.TryGetValue(entry.FileName, out byName))
         {
             target = byName;
             return true;
@@ -210,7 +200,7 @@ public sealed class MappingResolver : IMappingResolver
 
         foreach (var entry in zipEntries)
         {
-            if (IsModInfoFile(entry.FileName)) continue;
+            if (IsModInfoFile(entry)) continue;
             if (IsTopLevelSharedPath(entry.FullNameInZip))
             {
                 unmatched.Add(entry);
@@ -295,14 +285,21 @@ public sealed class MappingResolver : IMappingResolver
         return score;
     }
 
-    private static bool IsModInfoFile(string fileName) =>
-        string.Equals(fileName, "modinfo.json", StringComparison.OrdinalIgnoreCase);
+    private static bool IsModInfoFile(ZipEntryInfo entry) =>
+        !entry.FullNameInZip.Contains('/') && !entry.FullNameInZip.Contains('\\')
+        && string.Equals(entry.FileName, "modinfo.json", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTopLevelSharedPath(string fullNameInZip) =>
         string.Equals(GetTopLevelDir(fullNameInZip), "shared", StringComparison.OrdinalIgnoreCase);
 
     private static string Normalize(string path) =>
         path.Replace('\\', '/').TrimStart('/');
+
+    private static void ValidateExplicitTarget(string target)
+    {
+        if (!PathValidator.IsSafeRelativePath(target))
+            throw new InvalidDataException($"Unsafe modinfo target rejected: {target}");
+    }
 
     /// <summary>
     /// Post-pass: groups <see cref="MappingPlan.Mapped"/> entries by their

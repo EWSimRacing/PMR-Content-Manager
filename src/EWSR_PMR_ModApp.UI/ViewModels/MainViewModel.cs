@@ -8,6 +8,7 @@ using EWSR_PMR_ModApp.Core.GameDetection;
 using EWSR_PMR_ModApp.Core.Manifest;
 using EWSR_PMR_ModApp.Core.SyncEngine;
 using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
+using EWSR_PMR_ModApp.Core.ZipHandling;
 using EWSR_PMR_ModApp.UI.Dialogs;
 using EWSR_PMR_ModApp.UI.Infrastructure;
 using Microsoft.Win32;
@@ -26,7 +27,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly TimeProvider    _clock;
     private readonly IHookRunner     _hookRunner;
     /// <summary>Resolves the correct writer at operation time based on DataRoot writability.</summary>
-    private readonly Func<string, IElevatedWriter> _writerFactory;
+    private readonly Func<WritePlanRequest, IElevatedWriter> _writerFactory;
 
     private string?  _dataRoot;
     private bool     _isBusy;
@@ -50,7 +51,7 @@ public sealed class MainViewModel : ViewModelBase
         UISettingsStore settingsStore,
         TimeProvider    clock,
         IHookRunner     hookRunner,
-        Func<string, IElevatedWriter> writerFactory)
+        Func<WritePlanRequest, IElevatedWriter> writerFactory)
     {
         _gameLocator   = gameLocator;
         _manifestStore = manifestStore;
@@ -199,6 +200,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task InstallZipsAsync(IEnumerable<string> zipPaths)
     {
+        if (IsBusy) return;
         if (DataRoot is null)
         {
             MessageBox.Show(
@@ -217,17 +219,22 @@ public sealed class MainViewModel : ViewModelBase
                 string modName = Path.GetFileNameWithoutExtension(zipPath);
                 SetStatus($"Installing {modName}…", 0);
 
-                var progress = MakeProgress();
+                bool preparing = true;
+                var progress = MakeProgress(() => preparing);
                 InstallPlan? plan = null;
                 try
                 {
                     // Step 1: pure prepare — validates zip, stages, resolves mappings.
-                    plan = await _syncEngine.PrepareInstallAsync(
-                        zipPath,
-                        DataRoot,
-                        modName,
-                        confirmAmbiguous: ResolveAmbiguousMappingsAsync,
-                        progress: progress);
+                    try
+                    {
+                        plan = await _syncEngine.PrepareInstallAsync(
+                            zipPath,
+                            DataRoot,
+                            modName,
+                            confirmAmbiguous: ResolveAmbiguousMappingsAsync,
+                            progress: progress);
+                    }
+                    finally { preparing = false; }
 
                     // Step 2: execute file writes via the appropriate writer.
                     var request = new WritePlanRequest
@@ -240,7 +247,9 @@ public sealed class MainViewModel : ViewModelBase
                         FilesToBackup = plan.FilesToBackup
                     };
 
-                    var writer      = _writerFactory(DataRoot);
+                    SetStatus("Selecting write permissions…", 35);
+                    var writer      = _writerFactory(request);
+                    SetStatus(writer is HelperProcessWriter ? "Waiting for administrator approval / installing files…" : "Backing up and installing files…", 40);
                     var writeResult = await writer.ExecuteAsync(request);
 
                     if (!writeResult.Success)
@@ -323,6 +332,23 @@ public sealed class MainViewModel : ViewModelBase
                         }
                     }
                 }
+                catch (UnsupportedModPackageException ex)
+                {
+                    MessageBox.Show(
+                        $"Cannot install {modName}:\n\n{ex.Message}",
+                        "Unsupported Mod Package",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    SetStatus($"Unsupported package: {modName}.", 0);
+                    continue;
+                }
+                catch (InvalidDataException ex)
+                {
+                    MessageBox.Show($"Cannot install {modName}:\n\n{ex.Message}",
+                        "Invalid Mod Package", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    SetStatus($"Invalid package: {modName}.", 0);
+                    continue;
+                }
                 catch (OperationCanceledException)
                 {
                     SetStatus("Install cancelled.", 0);
@@ -393,7 +419,7 @@ public sealed class MainViewModel : ViewModelBase
                 FilesToDelete = plan.NewFilesToDelete
             };
 
-            var writer      = _writerFactory(plan.DataRoot);
+            var writer      = _writerFactory(request);
             var writeResult = await writer.ExecuteAsync(request);
 
             if (!writeResult.Success)
@@ -479,10 +505,19 @@ public sealed class MainViewModel : ViewModelBase
             SetStatus("Checking for reverted mods…", 0);
             var plan = await _syncEngine.PrepareReapplyAsync(DataRoot);
 
+            if (plan.Warnings.Count > 0)
+            {
+                var warningsDlg = new WarningsDialog("Reapply — files held for review", plan.Warnings)
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                warningsDlg.ShowDialog();
+            }
+
             if (plan.ModsToReapply.Count == 0)
             {
-                SetStatus("All mods intact — nothing to reapply.", 0);
-                MessageBox.Show("All mods are intact. No files have been reverted.",
+                SetStatus(plan.Warnings.Count > 0 ? "Changed baselines held for review — no stale audio files applied." : "All mods intact — nothing to reapply.", 0);
+                if (plan.Warnings.Count == 0) MessageBox.Show("All mods are intact. No files have been reverted.",
                     "All Mods OK", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -503,7 +538,7 @@ public sealed class MainViewModel : ViewModelBase
                 FilesToCopy = allFiles
             };
 
-            var writer      = _writerFactory(plan.DataRoot);
+            var writer      = _writerFactory(request);
             var writeResult = await writer.ExecuteAsync(request);
 
             if (!writeResult.Success)
@@ -573,7 +608,7 @@ public sealed class MainViewModel : ViewModelBase
                 payloadDir,
                 mapping.ZipEntry.FullNameInZip.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(mapping.ZipEntry.StagedFilePath, dest, overwrite: true);
+            ManagedFileOperations.Copy(mapping.ZipEntry.StagedFilePath, dest, overwrite: true);
         }
     }
 
@@ -587,10 +622,10 @@ public sealed class MainViewModel : ViewModelBase
         Directory.CreateDirectory(scriptDir);
 
         if (plan.PostInstallHook is { } piHook)
-            File.Copy(piHook.StagedPath, Path.Combine(scriptDir, piHook.ScriptName), overwrite: true);
+            ManagedFileOperations.Copy(piHook.StagedPath, Path.Combine(scriptDir, piHook.ScriptName), overwrite: true);
 
         if (plan.PostUninstallHook is { } puHook)
-            File.Copy(puHook.StagedPath, Path.Combine(scriptDir, puHook.ScriptName), overwrite: true);
+            ManagedFileOperations.Copy(puHook.StagedPath, Path.Combine(scriptDir, puHook.ScriptName), overwrite: true);
     }
 
     /// <summary>
@@ -612,7 +647,9 @@ public sealed class MainViewModel : ViewModelBase
 
             bool    isNew         = !File.Exists(backupPath);
             string? originalHash  = isNew ? null : HashHelper.ComputeFileHash(backupPath);
-            string  installedHash = HashHelper.ComputeFileHash(mapping.ZipEntry.StagedFilePath);
+            string  installedHash = plan.FilesToCopy.Single(s => s.TargetRoot == mapping.TargetRoot
+                && s.RelativeTargetPath == mapping.RelativeTargetPath).ExpectedSourceHash
+                ?? HashHelper.ComputeFileHash(mapping.ZipEntry.StagedFilePath);
 
             installedFiles.Add(new InstalledFileEntry
             {
@@ -633,6 +670,7 @@ public sealed class MainViewModel : ViewModelBase
             SourceZipHash    = plan.ZipHash,
             InstallTimestamp = _clock.GetUtcNow(),
             Files            = installedFiles,
+            NativePatchId    = plan.NativePatchId,
             Hooks = (plan.PostInstallHook is not null || plan.PostUninstallHook is not null)
                 ? new ModHookMetadata
                   {
@@ -679,9 +717,10 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    private IProgress<SyncProgress> MakeProgress() =>
+    private IProgress<SyncProgress> MakeProgress(Func<bool>? isCurrent = null) =>
         new Progress<SyncProgress>(p =>
         {
+            if (isCurrent is not null && !isCurrent()) return;
             // Progress<T> invokes on the capturing SynchronizationContext (UI thread).
             StatusText    = p.CurrentFile is not null
                 ? $"{p.Phase} — {Path.GetFileName(p.CurrentFile)}"
@@ -708,18 +747,21 @@ public sealed class MainViewModel : ViewModelBase
             : modName is not null
                 ? $"Failed to {operation.ToLowerInvariant()} {modName}:\n\n{result.ErrorMessage}"
                 : $"{operation} failed:\n\n{result.ErrorMessage}";
-
-        MessageBox.Show(msg, title, MessageBoxButton.OK,
-            cancelled ? MessageBoxImage.Warning : MessageBoxImage.Error);
+        if (result.RollbackAttempted)
+            msg += result.RollbackSucceeded
+                ? "\n\nAll attempted file writes were rolled back to their pre-operation state. You can retry after resolving the error."
+                : "\n\nRollback was incomplete. Do not retry or uninstall until the retained recovery snapshots/journal listed above have been reviewed and the files recovered.";
 
         SetStatus(cancelled
             ? $"{operation} cancelled."
             : $"{operation} failed: {result.ErrorMessage}", 0);
+        MessageBox.Show(msg, title, MessageBoxButton.OK,
+            cancelled ? MessageBoxImage.Warning : MessageBoxImage.Error);
     }
 
     private static void TryDeleteDirectory(string path)
     {
-        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        try { if (Directory.Exists(path)) ManagedFileOperations.DeleteDirectory(path, recursive: true); }
         catch { /* Best-effort cleanup — do not throw. */ }
     }
 }

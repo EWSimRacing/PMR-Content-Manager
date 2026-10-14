@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## v1.3.4 — 2026-10-13
+
+### Fixed
+
+- Protected game-file writes now use the administrator helper under Program Files, even when the parent folder allows creating files. The UI remains non-elevated so Explorer drag/drop works.
+- Failed install/reapply copies stop and roll back to their pre-operation bytes and attributes. If recovery is blocked, errors identify retained snapshots and the recovery journal.
+- Install failures show the actual per-file errors instead of an empty failure dialog.
+- ReadOnly attributes are handled only on managed files and restored afterward; game ACLs and ownership are never changed.
+- Portable builds include the helper's managed runtime assembly correctly.
+
+### Improved
+
+- Conventional mod ZIPs support loose known-format assets, direct game-relative paths and up to three wrapper folders around `data/`. Ambiguous destinations require confirmation; colliding targets are not installed.
+- Script-only installers receive an explicit unsupported-package error. Bundled archives remain skipped rather than recursively installed.
+- The exact reviewed Cockpit Immersion Audio v1.0.3 archive has native XML transformation support without running its scripts. Reapply verifies cached payloads and original baselines; changed game files are held for review.
+- Added `Release.ps1` for validated, versioned portable packages and opt-in GitHub publication.
+
+### Updating
+
+Extract the new ZIP into a fresh folder and run `PMR CM.exe`. Existing settings, installed-mod records and backups remain in `%APPDATA%\EWSR_PMR_ModApp`.
+
+Mods remain for offline/single-player use. If an older CM build left a partial installation, recover from the first attempt's backups before reinstalling; updating the app does not automatically repair that state.
+
 ## v1.3 — 2026-06-28
 
 ### New Feature — Game-Root Install Targets

@@ -8,7 +8,7 @@ public sealed class InstalledFileEntry
     /// <summary>Relative path under the game data root (e.g. <c>vehicles/car_a/livery.dds</c>).</summary>
     public required string RelativeTargetPath { get; init; }
 
-    /// <summary>Path of the source inside the mod zip (e.g. <c>data/vehicles/car_a/livery.dds</c>).</summary>
+    /// <summary>Source path in the ZIP or native-generated payload (e.g. <c>data/vehicles/car_a/livery.dds</c>).</summary>
     public required string SourcePathInZip { get; init; }
 
     /// <summary>How the target path was determined.</summary>

@@ -3,6 +3,8 @@ namespace EWSR_PMR_ModApp.Core.Manifest;
 /// <summary>Represents a single installed mod entry in the application manifest.</summary>
 public sealed class ModEntry
 {
+    /// <summary>Reviewed native transformation identifier, used to enforce baseline-aware reapply.</summary>
+    public string? NativePatchId { get; init; }
     /// <summary>Stable UUID string identifying this mod installation.</summary>
     public required string ModId { get; init; }
 

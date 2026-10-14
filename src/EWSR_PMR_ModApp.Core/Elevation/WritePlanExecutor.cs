@@ -1,12 +1,13 @@
 using EWSR_PMR_ModApp.Core.Common;
+using EWSR_PMR_ModApp.Core.Abstractions;
 using EWSR_PMR_ModApp.Core.SyncEngine.Mapping;
 
 namespace EWSR_PMR_ModApp.Core.Elevation;
 
 /// <summary>
 /// Stateless, synchronous executor shared between <see cref="InProcessWriter"/> and the elevated
-/// <c>EWSR_PMR_ModApp.Helper</c> process.  Uses real <see cref="System.IO"/> — no
-/// <c>IFileSystem</c> abstraction — because both callers operate against real files.
+/// <c>EWSR_PMR_ModApp.Helper</c> process. Both callers operate against real files;
+/// pre-operation recovery uses the same transaction as the direct Core path.
 /// </summary>
 /// <remarks>
 /// Backup format matches <c>BackupService</c>:
@@ -27,15 +28,23 @@ public static class WritePlanExecutor
         int filesDeleted  = 0;
         int filesBackedUp = 0;
         var errors        = new List<FileOperationError>();
+        FileWriteTransaction? transaction = null;
+        bool rollbackAttempted = false;
+        bool rollbackSucceeded = false;
 
         try
         {
+            // Verify every native patch baseline before any backup or write, including in the elevated helper.
+            foreach (var spec in request.FilesToCopy ?? [])
+                ValidateBaseline(request.DataRoot, request.GameRoot, spec);
+            if (request.Operation is WritePlanOperation.Install or WritePlanOperation.Reapply)
+                transaction = new FileWriteTransaction(new RealFileSystem(), request.DataRoot, request.GameRoot, request.FilesToCopy ?? []);
             switch (request.Operation)
             {
                 case WritePlanOperation.Install:
                     filesBackedUp = BackupFiles(request.ModId, request.DataRoot, request.GameRoot, request.FilesToBackup, errors, logLine);
                     if (errors.Count == 0)
-                        filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine);
+                        filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine, transaction!);
                     break;
 
                 case WritePlanOperation.Uninstall:
@@ -45,7 +54,7 @@ public static class WritePlanExecutor
                     break;
 
                 case WritePlanOperation.Reapply:
-                    filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine);
+                    filesCopied = CopyFiles(request.DataRoot, request.GameRoot, request.FilesToCopy, errors, logLine, transaction!);
                     break;
             }
         }
@@ -54,13 +63,34 @@ public static class WritePlanExecutor
             errors.Add(new FileOperationError { RelativePath = "*", Message = ex.ToString() });
         }
 
+        if (transaction is not null)
+        {
+            if (errors.Count == 0)
+            {
+                try { transaction.Commit(); }
+                catch (Exception ex) { errors.Add(new FileOperationError { RelativePath = "*", Message = ex.ToString() }); }
+            }
+            if (errors.Count > 0)
+            {
+                rollbackAttempted = true;
+                var rollbackErrors = transaction.Rollback(new IOException(string.Join("\n", errors.Select(e => $"{e.RelativePath}: {e.Message}"))));
+                rollbackSucceeded = rollbackErrors.Count == 0;
+                errors.AddRange(rollbackErrors);
+                if (rollbackSucceeded) filesCopied = 0;
+            }
+        }
+
         return new WriteResult
         {
             Success       = errors.Count == 0,
+            ErrorMessage  = errors.Count == 0 ? null : string.Join("\n", errors.Select(e => $"{e.RelativePath}: {e.Message}")),
             FilesCopied   = filesCopied,
             FilesDeleted  = filesDeleted,
             FilesBackedUp = filesBackedUp,
-            Errors        = errors
+            Errors        = errors,
+            RollbackAttempted = rollbackAttempted,
+            RollbackSucceeded = rollbackSucceeded,
+            RecoveryDirectory = rollbackAttempted && !rollbackSucceeded ? transaction?.RecoveryDirectory : null
         };
     }
 
@@ -96,7 +126,7 @@ public static class WritePlanExecutor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                File.Copy(source, dest, overwrite: true);
+                if (!File.Exists(dest)) File.Copy(source, dest, overwrite: false);
                 count++;
                 log?.Invoke($"  backed up: {relative}");
             }
@@ -114,7 +144,8 @@ public static class WritePlanExecutor
         string gameRoot,
         IReadOnlyList<FileCopySpec>? specs,
         List<FileOperationError> errors,
-        Action<string>? log)
+        Action<string>? log,
+        FileWriteTransaction transaction)
     {
         if (specs is null or { Count: 0 }) return 0;
         int count = 0;
@@ -124,14 +155,17 @@ public static class WritePlanExecutor
             string dest = Path.Combine(GetBaseRoot(dataRoot, gameRoot, spec.TargetRoot), spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
             try
             {
+                ValidateBaseline(dataRoot, gameRoot, spec);
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                File.Copy(spec.SourcePath, dest, overwrite: true);
+                transaction.BeforeWrite(dest);
+                ManagedFileOperations.Copy(spec.SourcePath, dest, overwrite: true);
                 count++;
                 log?.Invoke($"  copied: {spec.RelativeTargetPath}");
             }
             catch (Exception ex)
             {
                 errors.Add(new FileOperationError { RelativePath = spec.RelativeTargetPath, Message = ex.Message });
+                break;
             }
         }
 
@@ -165,7 +199,7 @@ public static class WritePlanExecutor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                File.Copy(backupFile, dest, overwrite: true);
+                ManagedFileOperations.Copy(backupFile, dest, overwrite: true, restoreSourceAttributes: true);
                 count++;
                 log?.Invoke($"  restored: {relative}");
             }
@@ -200,7 +234,7 @@ public static class WritePlanExecutor
 
             try
             {
-                File.Delete(path);
+                ManagedFileOperations.Delete(path);
                 count++;
                 log?.Invoke($"  deleted: {relative}");
             }
@@ -215,6 +249,18 @@ public static class WritePlanExecutor
 
     private static string GetBaseRoot(string dataRoot, string gameRoot, TargetRoot targetRoot) =>
         targetRoot == TargetRoot.Game ? gameRoot : dataRoot;
+
+    private static void ValidateBaseline(string dataRoot, string gameRoot, FileCopySpec spec)
+    {
+        if (spec.ExpectedSourceHash is not null && (!File.Exists(spec.SourcePath)
+            || !string.Equals(HashHelper.ComputeFileHash(spec.SourcePath), spec.ExpectedSourceHash, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Prepared payload changed for '{spec.RelativeTargetPath}'. Refusing native patch.");
+        if (spec.ExpectedTargetHash is null) return;
+        string target = Path.Combine(GetBaseRoot(dataRoot, gameRoot, spec.TargetRoot),
+            spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(target) || !string.Equals(HashHelper.ComputeFileHash(target), spec.ExpectedTargetHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Baseline changed for '{spec.RelativeTargetPath}'. Refusing stale native patch.");
+    }
 
     private static string BackupPrefix(TargetRoot targetRoot) =>
         targetRoot == TargetRoot.Game ? "__game__" : "__data__";

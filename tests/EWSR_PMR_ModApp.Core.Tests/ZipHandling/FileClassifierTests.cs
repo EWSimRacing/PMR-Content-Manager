@@ -98,8 +98,8 @@ public class FileClassifierTests
     [InlineData("weather.xml")]
     [InlineData("engine.hadron")]
     [InlineData("model.i3d")]
-    public void GameDataExtension_AtRoot_IsNoPathMatch(string fileName)
-        => Assert.Equal(SkipCategory.NoPathMatch, Classify(fileName));
+    public void GameDataExtension_AtRoot_RequiresMapping(string fileName)
+        => Assert.Equal(SkipCategory.AmbiguousPending, Classify(fileName));
 
     // ── MetaFile — modinfo.json at zip root ───────────────────────────────────────
 
@@ -228,8 +228,8 @@ public class FileClassifierTests
         => Assert.Equal(SkipCategory.Install, Classify("data/config/settings.json"));
 
     [Fact]
-    public void Json_AtRoot_IsNoPathMatch()
-        => Assert.Equal(SkipCategory.NoPathMatch, Classify("settings.json"));
+    public void Json_AtRoot_RequiresMapping()
+        => Assert.Equal(SkipCategory.AmbiguousPending, Classify("settings.json"));
 
     // ── Install — .eval (FFB / physics eval files) inside data/ ─────────────────
 
@@ -240,8 +240,8 @@ public class FileClassifierTests
         => Assert.Equal(SkipCategory.Install, Classify(path));
 
     [Fact]
-    public void EvalExtension_AtRoot_IsNoPathMatch()
-        => Assert.Equal(SkipCategory.NoPathMatch, Classify("ffb.rack.eval"));
+    public void EvalExtension_AtRoot_RequiresMapping()
+        => Assert.Equal(SkipCategory.AmbiguousPending, Classify("ffb.rack.eval"));
 
     // ── Case insensitivity — extensions and paths ─────────────────────────────────
 

@@ -19,4 +19,9 @@ public sealed class FileCopySpec
 
     /// <summary>Root that <see cref="RelativeTargetPath"/> is relative to.</summary>
     public TargetRoot TargetRoot { get; init; } = TargetRoot.Data;
+
+    /// <summary>When set, refuse writes if the baseline changed after native patch preparation.</summary>
+    public string? ExpectedTargetHash { get; init; }
+    /// <summary>Integrity precondition for a generated/cached native payload.</summary>
+    public string? ExpectedSourceHash { get; init; }
 }

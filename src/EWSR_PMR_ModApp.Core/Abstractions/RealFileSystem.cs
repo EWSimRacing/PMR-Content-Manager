@@ -9,17 +9,19 @@ public sealed class RealFileSystem : IFileSystem
     public bool DirectoryExists(string path) => Directory.Exists(path);
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
-    public void CopyFile(string sourcePath, string destinationPath, bool overwrite)
+    public void CopyFile(string sourcePath, string destinationPath, bool overwrite, bool restoreSourceAttributes = false)
     {
         // NOTE: Writes to C:\Program Files require admin elevation at runtime.
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        File.Copy(sourcePath, destinationPath, overwrite);
+        Elevation.ManagedFileOperations.Copy(sourcePath, destinationPath, overwrite, restoreSourceAttributes);
     }
+    public FileAttributes GetFileAttributes(string path) => File.GetAttributes(path);
+    public void SetFileAttributes(string path, FileAttributes attributes) => File.SetAttributes(path, attributes);
 
-    public void DeleteFile(string path) => File.Delete(path);
+    public void DeleteFile(string path) => Elevation.ManagedFileOperations.Delete(path);
 
     public void DeleteDirectory(string path, bool recursive) =>
-        Directory.Delete(path, recursive);
+        Elevation.ManagedFileOperations.DeleteDirectory(path, recursive);
 
     public string ReadAllText(string path) => File.ReadAllText(path);
 

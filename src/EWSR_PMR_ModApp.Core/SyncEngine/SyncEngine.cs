@@ -89,6 +89,83 @@ public sealed class SyncEngine : ISyncEngine
 
         try
         {
+            bool nativeAudio = CockpitImmersionAudio.Recognizes(staged.ZipHash);
+            var baselines = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var payloadHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            IReadOnlyList<ZipEntryInfo> installEntries = staged.Entries;
+            if (nativeAudio)
+            {
+                Report(progress, "Preparing native Cockpit Immersion Audio (no scripts)", 20);
+                var generated = new List<ZipEntryInfo>();
+                var installed = await _manifestStore.LoadAsync(ct).ConfigureAwait(false);
+                if (installed.Mods.Values.Any(m => m.NativePatchId == CockpitImmersionAudio.PatchId))
+                    throw new UnsupportedModPackageException("Cockpit Immersion Audio is already managed. Use Re-check & Reapply instead of installing it twice.");
+                foreach (string path in _fs.EnumerateFiles(dataRoot, "*", SearchOption.AllDirectories)
+                             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    string relative = Path.GetRelativePath(dataRoot, path).Replace('\\', '/');
+                    if (!relative.StartsWith("vehicles/", StringComparison.OrdinalIgnoreCase)
+                        || !relative.EndsWith("audioConfig.xml", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!PathValidator.IsUnderDataRoot(dataRoot, relative))
+                        throw new InvalidDataException($"Unsafe audio asset: {relative}");
+                    for (string? current = path; current is not null
+                         && current.StartsWith(dataRoot, StringComparison.OrdinalIgnoreCase);
+                         current = Path.GetDirectoryName(current))
+                        if (_fs.ResolveJunctionTarget(current) is not null)
+                            throw new InvalidDataException($"Audio asset passes through a junction or symbolic link: {relative}");
+                    if (installed.Mods.Values.Any(m => m.Files.Any(f => f.TargetRoot == TargetRoot.Data
+                        && string.Equals(f.RelativeTargetPath, relative, StringComparison.OrdinalIgnoreCase))))
+                        throw new UnsupportedModPackageException(
+                            $"Audio target '{relative}' is already owned by another mod. Resolve that conflict before installing.");
+                    using var source = _fs.OpenRead(path);
+                    using var bytes = new MemoryStream();
+                    source.CopyTo(bytes);
+                    byte[] original = bytes.ToArray();
+                    byte[] replacement;
+                    try { replacement = CockpitImmersionAudio.Transform(original); }
+                    catch (Exception ex) when (ex is System.Xml.XmlException or InvalidDataException or ArgumentException)
+                    {
+                        throw new UnsupportedModPackageException($"Cannot safely patch '{relative}': {ex.Message}. No game files were changed.");
+                    }
+                    string zipRelative = "data/" + relative;
+                    string destination = Path.Combine(staged.StagingDirectory, zipRelative.Replace('/', Path.DirectorySeparatorChar));
+                    _fs.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    using (var output = _fs.CreateFile(destination)) output.Write(replacement);
+                    generated.Add(new ZipEntryInfo
+                    {
+                        FullNameInZip = zipRelative, StagedFilePath = destination,
+                        UncompressedSize = replacement.Length, Category = SkipCategory.Install
+                    });
+                    baselines[zipRelative] = HashHelper.ComputeBytesHash(original);
+                    payloadHashes[zipRelative] = HashHelper.ComputeBytesHash(replacement);
+                }
+                if (generated.Count == 0)
+                    throw new UnsupportedModPackageException("No *audioConfig.xml assets were found recursively under vehicles/ in the configured data folder. Cockpit Immersion Audio needs existing audio XML files.");
+                installEntries = generated;
+                warnings.Add("Recognized reviewed Cockpit Immersion Audio archive. Applied six native XML settings and EWSR credit; no downloaded scripts are executed. Changed game baselines are held for review during reapply.");
+            }
+
+            if (!nativeAudio && staged.Entries.Count == 0)
+            {
+                var blockedFiles = staged.SkippedFiles
+                    .Where(f => f.Category == SkipCategory.UnsafeFile)
+                    .Select(f => f.PathInZip)
+                    .ToList();
+
+                if (blockedFiles.Count > 0)
+                    throw new UnsupportedModPackageException(
+                        "This archive contains executable or script files but no installable game assets. " +
+                        "PMR CM does not automatically run standalone installers or copy their scripts into the game. " +
+                        "Built-in audio support requires the exact reviewed Cockpit Immersion Audio archive checksum. " +
+                        "No game files were changed.\n\n" +
+                        "Blocked files:\n" + string.Join("\n", blockedFiles) +
+                        "\n\nSee the archive's README for its installation method, or ask the author for a " +
+                        "CM-compatible ZIP containing the modified game files under data/. " +
+                        "Changing the game path will not supply the missing assets.");
+            }
+
             // 3. Build data-file index for filename-index fallback.
             Report(progress, "Indexing game files", 25);
             var dataFileIndex = BuildDataFileIndex(dataRoot);
@@ -96,28 +173,51 @@ public sealed class SyncEngine : ISyncEngine
             // 4. Resolve the mapping plan (pure — no disk writes).
             Report(progress, "Resolving file mappings", 30);
             var plan = _mappingResolver.Resolve(
-                staged.Entries, dataRoot, dataFileIndex, staged.ModInfo);
+                installEntries, dataRoot, dataFileIndex, nativeAudio ? null : staged.ModInfo);
+
+            if (!nativeAudio)
+                warnings.AddRange(staged.SkippedFiles.Where(f => f.Category != SkipCategory.MetaFile)
+                    .Select(f => $"Skipped ({f.Category}): {f.PathInZip} — {f.Reason}"));
 
             // 5. Delegate ambiguous entries to the UI callback.
             var allMapped = plan.Mapped.ToList();
             if (plan.Ambiguous.Count > 0)
             {
                 var resolved = await confirmAmbiguous(plan.Ambiguous).ConfigureAwait(false);
+                var resolvedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var r in resolved)
                 {
+                    var offered = plan.Ambiguous.FirstOrDefault(a => ReferenceEquals(a.ZipEntry, r.ZipEntry));
+                    if (offered is null || !resolvedSources.Add(r.ZipEntry.FullNameInZip))
+                        throw new InvalidDataException("Invalid or duplicate ambiguous source resolution.");
                     if (r.Skip || r.ChosenRelativeTargetPath is null)
                     {
-                        warnings.Add($"Skipped ambiguous file: {r.ZipEntry.FileName}");
+                        warnings.Add($"Skipped ambiguous file: {r.ZipEntry.FullNameInZip}");
                         continue;
                     }
+                    if (!offered.CandidatePaths.Contains(r.ChosenRelativeTargetPath.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"Destination was not offered for '{r.ZipEntry.FullNameInZip}': {r.ChosenRelativeTargetPath}");
                     allMapped.Add(new FileMappingResult
                     {
                         ZipEntry           = r.ZipEntry,
-                        RelativeTargetPath = r.ChosenRelativeTargetPath,
+                        RelativeTargetPath = r.ChosenRelativeTargetPath.Replace('\\', '/'),
                         MappingMethod      = MappingMethod.FilenameMatch,
                         TargetRoot         = TargetRoot.Data
                     });
                 }
+            }
+
+            var invalidDataTargets = allMapped.Where(m => m.TargetRoot == TargetRoot.Data
+                && !PathValidator.IsUnderDataRoot(dataRoot, m.RelativeTargetPath)).ToList();
+            if (invalidDataTargets.Count > 0)
+                throw new InvalidDataException("Unsafe data target rejected: " + string.Join("; ", invalidDataTargets.Select(m => m.RelativeTargetPath)));
+
+            var collisionsAfterConfirmation = allMapped.GroupBy(m => (m.TargetRoot, m.RelativeTargetPath.ToUpperInvariant()))
+                .Where(g => g.Count() > 1).ToList();
+            foreach (var collision in collisionsAfterConfirmation)
+            {
+                warnings.Add($"Path collision after confirmation: {collision.Key.Item2} — sources: {string.Join(", ", collision.Select(m => m.ZipEntry.FullNameInZip))} — none installed.");
+                foreach (var mapping in collision) allMapped.Remove(mapping);
             }
 
             var invalidGameRootTargets = allMapped
@@ -143,7 +243,10 @@ public sealed class SyncEngine : ISyncEngine
                 warnings.Add($"Skipped (no match in data): {entry.FullNameInZip}");
 
             if (allMapped.Count == 0)
-                throw new InvalidOperationException("No files could be mapped to the game data directory.");
+                throw new UnsupportedModPackageException(
+                    "No files could be mapped to the game data directory. No game files were changed.\n\n" +
+                    (warnings.Count > 0 ? string.Join("\n", warnings) : "The archive contains no mapped game assets.") +
+                    "\n\nUse a data/ layout or explicit modinfo.json mappings; resolve duplicate destinations or ambiguous filenames before retrying.");
 
             // 6. Generate a stable mod ID.
             string modId = Guid.NewGuid().ToString("N");
@@ -152,7 +255,7 @@ public sealed class SyncEngine : ISyncEngine
             StagedHook? postInstallHook   = null;
             StagedHook? postUninstallHook = null;
 
-            if (staged.ModInfo?.Hooks is { } hooks && staged.HookScripts.Count > 0)
+            if (!nativeAudio && staged.ModInfo?.Hooks is { } hooks && staged.HookScripts.Count > 0)
             {
                 foreach (var hookEntry in staged.HookScripts)
                 {
@@ -181,6 +284,7 @@ public sealed class SyncEngine : ISyncEngine
             return new InstallPlan
             {
                 ModId             = modId,
+                NativePatchId     = nativeAudio ? CockpitImmersionAudio.PatchId : null,
                 ModName           = modName,
                 DataRoot          = dataRoot,
                 GameRoot          = gameRoot,
@@ -195,7 +299,9 @@ public sealed class SyncEngine : ISyncEngine
                 {
                     SourcePath         = m.ZipEntry.StagedFilePath,
                     RelativeTargetPath = m.RelativeTargetPath,
-                    TargetRoot         = m.TargetRoot
+                    TargetRoot         = m.TargetRoot,
+                    ExpectedTargetHash = baselines.GetValueOrDefault(m.ZipEntry.FullNameInZip),
+                    ExpectedSourceHash = payloadHashes.GetValueOrDefault(m.ZipEntry.FullNameInZip)
                 }).ToList(),
                 MappedFiles       = allMapped,
                 Warnings          = warnings,
@@ -215,7 +321,33 @@ public sealed class SyncEngine : ISyncEngine
         IProgress<SyncProgress>? progress = null,
         CancellationToken ct = default)
     {
+        foreach (var spec in plan.FilesToCopy)
+            ValidateBaseline(plan.DataRoot, plan.GameRoot, spec);
+        var transaction = new FileWriteTransaction(_fs, plan.DataRoot, plan.GameRoot, plan.FilesToCopy);
+        try
+        {
+            var result = await ExecuteInstallTransactionAsync(plan, transaction, progress, ct).ConfigureAwait(false);
+            transaction.Commit();
+            return result;
+        }
+        catch (Exception ex)
+        {
+            var recoveryErrors = transaction.Rollback(ex);
+            if (recoveryErrors.Count > 0)
+                throw new IOException($"{ex.Message}\n{string.Join("\n", recoveryErrors.Select(e => e.Message))}", ex);
+            throw;
+        }
+    }
+
+    private async Task<InstallResult> ExecuteInstallTransactionAsync(
+        InstallPlan plan,
+        FileWriteTransaction transaction,
+        IProgress<SyncProgress>? progress,
+        CancellationToken ct)
+    {
         var warnings = plan.Warnings.ToList();
+        foreach (var spec in plan.FilesToCopy)
+            ValidateBaseline(plan.DataRoot, plan.GameRoot, spec);
 
         // 7. Backup originals before touching anything in the game directory.
         Report(progress, "Backing up originals", 40);
@@ -238,8 +370,11 @@ public sealed class SyncEngine : ISyncEngine
 
             bool    isNew        = !_fs.FileExists(destPath);
             string? originalHash = isNew ? null : _hasher.ComputeHash(destPath);
+            ValidateBaseline(plan.DataRoot, plan.GameRoot, plan.FilesToCopy.Single(s =>
+                s.TargetRoot == mapping.TargetRoot && s.RelativeTargetPath == mapping.RelativeTargetPath));
 
             // NOTE: Writes to C:\Program Files require admin elevation at runtime.
+            transaction.BeforeWrite(destPath);
             _fs.CopyFile(mapping.ZipEntry.StagedFilePath, destPath, overwrite: true);
 
             string installedHash = _hasher.ComputeHash(destPath);
@@ -299,6 +434,7 @@ public sealed class SyncEngine : ISyncEngine
             SourceZipHash    = plan.ZipHash,
             InstallTimestamp = _clock.GetUtcNow(),
             Files            = installedFiles,
+            NativePatchId    = plan.NativePatchId,
             Hooks            = hookMeta
         };
 
@@ -528,6 +664,7 @@ public sealed class SyncEngine : ISyncEngine
         string gameRoot = GetGameRoot(dataRoot);
 
         var modsToReapply = new List<ModReapplyItem>();
+        var warnings = new List<string>();
 
         foreach (var status in statuses.Where(s => s.State == ModRevertState.Reverted))
         {
@@ -557,13 +694,36 @@ public sealed class SyncEngine : ISyncEngine
                     payloadDir,
                     file.SourcePathInZip.Replace('/', Path.DirectorySeparatorChar));
 
-                if (!_fs.FileExists(payloadFile)) continue; // Errors reported during execute.
+                if (!_fs.FileExists(payloadFile))
+                {
+                    warnings.Add($"Payload missing for '{file.RelativeTargetPath}' (mod: {modEntry.ModName})");
+                    continue;
+                }
+
+                string? expectedBaseline = null;
+                if (modEntry.NativePatchId is not null)
+                {
+                    bool ownedByOtherMod = manifest.Mods.Values.Any(m => m.ModId != modEntry.ModId
+                        && m.Files.Any(f => f.TargetRoot == file.TargetRoot
+                            && string.Equals(f.RelativeTargetPath, file.RelativeTargetPath, StringComparison.OrdinalIgnoreCase)));
+                    if (modEntry.NativePatchId != CockpitImmersionAudio.PatchId || ownedByOtherMod
+                        || !_fs.FileExists(onDiskPath) || file.OriginalFileHash is null
+                        || !string.Equals(_hasher.ComputeHash(payloadFile), file.InstalledFileHash, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(_hasher.ComputeHash(onDiskPath), file.OriginalFileHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        warnings.Add($"Held for review: {file.RelativeTargetPath} ({modEntry.ModName}) — baseline changed, file missing, payload altered, or another mod owns it. No stale audio payload was applied; original backup retained.");
+                        continue;
+                    }
+                    expectedBaseline = file.OriginalFileHash;
+                }
 
                 filesToCopy.Add(new Elevation.FileCopySpec
                 {
                     SourcePath         = payloadFile,
                     RelativeTargetPath = file.RelativeTargetPath,
-                    TargetRoot         = file.TargetRoot
+                    TargetRoot         = file.TargetRoot,
+                    ExpectedTargetHash = expectedBaseline,
+                    ExpectedSourceHash = expectedBaseline is null ? null : file.InstalledFileHash
                 });
             }
 
@@ -578,7 +738,7 @@ public sealed class SyncEngine : ISyncEngine
             }
         }
 
-        return new ReapplyPlan { DataRoot = dataRoot, GameRoot = gameRoot, ModsToReapply = modsToReapply };
+        return new ReapplyPlan { DataRoot = dataRoot, GameRoot = gameRoot, ModsToReapply = modsToReapply, Warnings = warnings };
     }
 
     public async Task<ReapplyResult> ExecuteReapplyAsync(
@@ -588,43 +748,56 @@ public sealed class SyncEngine : ISyncEngine
     {
         int  modsReapplied  = 0;
         int  filesReapplied = 0;
-        var  errors         = new List<string>();
+        var  errors         = plan.Warnings.ToList();
 
-        foreach (var modItem in plan.ModsToReapply)
+        FileWriteTransaction? transaction = null;
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            Report(progress, $"Reapplying {modItem.ModName}", 0);
-
-            bool anyReapplied = false;
-
-            foreach (var spec in modItem.FilesToCopy)
+            var specs = plan.ModsToReapply.SelectMany(m => m.FilesToCopy).ToList();
+            foreach (var spec in specs)
+                ValidateBaseline(plan.DataRoot, plan.GameRoot, spec);
+            transaction = new FileWriteTransaction(_fs, plan.DataRoot, plan.GameRoot, specs);
+            foreach (var modItem in plan.ModsToReapply)
             {
                 ct.ThrowIfCancellationRequested();
+                Report(progress, $"Reapplying {modItem.ModName}", 0);
 
-                string onDiskPath = Path.Combine(
-                    GetBaseRoot(plan.DataRoot, plan.GameRoot, spec.TargetRoot),
-                    spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+                bool anyReapplied = false;
 
-                if (!_fs.FileExists(spec.SourcePath))
+                foreach (var spec in modItem.FilesToCopy)
                 {
-                    errors.Add($"Payload missing for '{spec.RelativeTargetPath}' (mod: {modItem.ModName})");
-                    continue;
-                }
+                    ct.ThrowIfCancellationRequested();
 
-                try
-                {
+                    string onDiskPath = Path.Combine(
+                        GetBaseRoot(plan.DataRoot, plan.GameRoot, spec.TargetRoot),
+                        spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+
+                    if (!_fs.FileExists(spec.SourcePath))
+                        throw new FileNotFoundException($"Payload missing for '{spec.RelativeTargetPath}' (mod: {modItem.ModName})");
+
+                    ValidateBaseline(plan.DataRoot, plan.GameRoot, spec);
                     // NOTE: Writes to C:\Program Files require admin elevation at runtime.
+                    transaction.BeforeWrite(onDiskPath);
                     _fs.CopyFile(spec.SourcePath, onDiskPath, overwrite: true);
                     filesReapplied++;
                     anyReapplied = true;
                 }
-                catch (Exception ex)
-                {
-                    errors.Add($"Failed to reapply '{spec.RelativeTargetPath}': {ex.Message}");
-                }
-            }
 
-            if (anyReapplied) modsReapplied++;
+                if (anyReapplied) modsReapplied++;
+            }
+            transaction.Commit();
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Failed to reapply: {ex.Message}");
+            var recoveryErrors = transaction?.Rollback(ex) ?? [];
+            errors.AddRange(recoveryErrors.Select(e => e.Message));
+            if (recoveryErrors.Count == 0)
+            {
+                filesReapplied = 0;
+                modsReapplied = 0;
+            }
+            if (ex is OperationCanceledException && recoveryErrors.Count == 0) throw;
         }
 
         return new ReapplyResult
@@ -676,4 +849,15 @@ public sealed class SyncEngine : ISyncEngine
 
     private static void Report(IProgress<SyncProgress>? progress, string phase, int percent) =>
         progress?.Report(new SyncProgress { Phase = phase, PercentComplete = percent });
+    private void ValidateBaseline(string dataRoot, string gameRoot, FileCopySpec spec)
+    {
+        if (spec.ExpectedSourceHash is not null && (!_fs.FileExists(spec.SourcePath)
+            || !string.Equals(_hasher.ComputeHash(spec.SourcePath), spec.ExpectedSourceHash, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Prepared payload changed for '{spec.RelativeTargetPath}'. Refusing native patch.");
+        if (spec.ExpectedTargetHash is null) return;
+        string path = Path.Combine(GetBaseRoot(dataRoot, gameRoot, spec.TargetRoot),
+            spec.RelativeTargetPath.Replace('/', Path.DirectorySeparatorChar));
+        if (!_fs.FileExists(path) || !string.Equals(_hasher.ComputeHash(path), spec.ExpectedTargetHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Baseline changed for '{spec.RelativeTargetPath}' after preparation. Re-check before writing; no stale patch is safe.");
+    }
 }

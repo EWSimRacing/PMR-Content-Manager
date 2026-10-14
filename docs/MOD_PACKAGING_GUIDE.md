@@ -65,6 +65,103 @@ The mod manager categorizes every file in your zip:
 
 ## Folder Structure Options
 
+### Reviewed Cockpit Immersion Audio — native support, never script execution
+
+PMR CM has one narrowly scoped native adapter for the supplied
+`Cockpit_Immersion_Audio_PMR_v1.0.3.zip`. Recognition is by the **entire archive's
+SHA-256**, not its filename, script names or dynamically interpreted script text:
+
+```
+494c21136d015a04766ae317e9f13967fb59718248fcfab28371c76414e5fa12
+```
+
+This intentionally supports only the reviewed bytes. A renamed byte-identical copy
+works; edited, repacked or different-version archives need separate review.
+No `.ps1`, `.bat`, shell command or downloaded code from this package is executed.
+
+CM reads existing `data/vehicles/**/*audioConfig.xml` files (including the shared
+default config), requires a valid unnamespaced `audioConfig` root and changes exactly:
+
+| Direct child setting | `value` |
+|---|---|
+| `interiorReverbMix` | `0.24` |
+| `rtmEngineVolume` | `6.2` |
+| `rtmExhaustVolume` | `3.2` |
+| `rtmTransmissionVolume` | `4.2` |
+| `rtmInteriorFXWindVolume` | `0.95` |
+| `rtmInteriorFXRattlesVolume` | `-3.0` |
+
+Missing settings/`value` attributes are added. Existing unrelated attributes, elements
+and comments remain; the EWSR credit comment is inserted once before the first element.
+Existing whitespace and UTF-8/UTF-16 encoding/BOM are retained where possible; XML
+serialization may normalize quotes and empty-tag spacing. Other encodings, namespaces,
+duplicate target settings, nested setting elements, DTDs, oversized XMLs (over the
+4 MiB character limit), and linked/reparse targets are rejected rather than guessed.
+One incompatible target aborts preparation before any game writes.
+
+Generated XMLs are staged as normal `data/` assets. The standard write helper checks
+their hashes and original baseline hashes before backing up/writing; original backups,
+manifest and cached generated payloads support byte-exact uninstall and safe reapply.
+Existing ownership conflicts and duplicate installation of the native mod are rejected.
+
+Writer selection is request-aware: Program Files targets always use the elevated helper;
+a writable parent directory is not evidence that an existing XML's ACL permits overwrite.
+ReadOnly bits are handled only on the specific managed files and restored after writes.
+Rollback/uninstall restore snapshot/backup attributes as well as bytes, without ACL or
+ownership changes. File locks or genuinely denied permissions still fail with the named
+file and existing rollback/recovery reporting.
+
+Reapply only writes a generated file if its current bytes match the recorded original
+baseline and its cached payload still matches the installed hash. Missing/changed
+baselines or ownership conflicts are held with named warnings, not silently overwritten.
+Backups are not refreshed. Under the existing uninstall policy, uninstall restores
+the **pre-install** bytes, which may belong to an older game version after an update.
+CM does not automatically regenerate a patch against a changed vanilla baseline;
+that requires deliberate current-version validation.
+
+### Other standalone script installers are not game-file packages
+
+A ZIP other than the exact native-supported archive containing only apply/restore scripts (`.ps1`, `.bat`, etc.) and documentation
+has no game assets for PMR CM to copy. It is rejected as an **Unsupported Mod Package**,
+with the blocked filenames listed, before any game writes, backups or manifest changes.
+Changing the configured `data` folder does not make such an archive installable.
+
+For example, `Cockpit_Immersion_Audio_PMR_v1.0.3.zip` contains:
+
+```
+Apply_Cockpit_Immersion_Audio.ps1
+Restore_Cockpit_Immersion_Audio.ps1
+Run_Apply_Cockpit_Immersion_Audio.bat
+Run_Restore_Cockpit_Immersion_Audio.bat
+README.md
+CHANGELOG.md
+```
+
+Its original apply script edits the installed `data\vehicles\**\*audioConfig.xml` files;
+it does not include replacement XML files. The native adapter supplies those
+replacements without executing the installer. For any unsupported version, consult
+its README or obtain an asset-based ZIP; manual script installation uses backups
+outside PMR CM's managed workflow.
+
+Read-only inspection of the reported installation on 2026-10-03 confirmed 72 matching
+XML filenames, including these exact game-root-relative destinations:
+
+```
+data/vehicles/Acura_ARX-06_2023/data/Acura_ARX-06_2023_audioConfig.xml
+data/vehicles/_shared/audio/default_audioConfig.xml
+```
+
+The script's recursive filename pattern includes the shared default config, not just
+per-car configs. The destinations exist, but their presence cannot supply the missing
+replacement contents in the ZIP. These are packaging examples, not a fixed inventory
+for every game version.
+
+For conventional CM compatibility, an author can supply modified game assets at their exact
+`data/vehicles/...` paths (and document the compatible game version). Adding a `data/`
+prefix to scripts or declaring them as file mappings does not bypass executable
+protections. Declared hooks are a separate, explicit-consent feature, not a way to
+turn a script-only ZIP into a managed game-file installation.
+
 The mod manager accepts three packaging styles:
 
 ### Option A: Full `data/` prefix (recommended)
@@ -81,6 +178,14 @@ mod.zip
 ```
 
 The engine strips `data/` and installs to: `{game}/data/tracks/defs/environment/weather.xml`
+
+An explicit `data/` anchor can also have up to three common enclosing folders, e.g.
+`Download/MyMod/v1/data/tracks/defs/environment/weather.xml`. Original ZIP source paths
+remain recorded in the manifest. Multiple unrelated wrappers are not silently flattened.
+Known direct game folders take precedence over wrapper detection, so
+`vehicles/Car/data/Car_audioConfig.xml` keeps its nested game `data` folder.
+Rooted/traversal/alternate-stream paths and case-colliding duplicate ZIP entries are rejected
+before extraction. Symlink/junction destinations are not written.
 
 ### Option B: Direct subfolder (also works)
 
@@ -107,6 +212,12 @@ mod.zip
 The engine uses filename matching to find targets. Works for unique filenames, but if multiple game files share a name, you'll be prompted to resolve the ambiguity.
 
 **Recommendation:** Always use Option A or B. Flat zips cause friction.
+
+Known loose/direct asset formats are mapping candidates, not permission to copy to
+an arbitrary destination. A filename must match an existing indexed asset, or a direct
+folder must be known under the selected `data` root. Mixed `data/` and loose files are
+resolved individually. Duplicate destinations are held out of installation; if no
+files can safely map, the error lists the unmapped/colliding filenames.
 
 ---
 
@@ -235,7 +346,7 @@ Even this minimal manifest helps — the mod manager uses it for display name an
 
 | Field | Required | Purpose |
 |-------|----------|---------|
-| `schemaVersion` | Yes | Always `1`. Enables future migrations. |
+| `schemaVersion` | Yes | `1` for data mappings; `2` also enables allowlisted game-root mappings and fallback for unlisted assets. Unsupported versions are rejected. |
 | `name` | Yes | Display name in mod manager UI. |
 | `version` | Yes | Version string (semver recommended). |
 | `author` | No | Your name/handle. |
@@ -257,6 +368,12 @@ Use explicit `files` mapping when:
 - You're distributing multiple variants in one zip
 
 For most mods, omit `files` and let the engine use path-overlay.
+
+Mapping values are safe relative destination paths, or `"install"` to use normal
+mapping heuristics for that listed source (not a literal file named `install`).
+Exact full source-path keys take precedence over basename keys. Malformed metadata,
+null mappings and unsafe targets are rejected instead of silently falling back.
+Executable/script protections still run before ordinary explicit mappings.
 
 ### Installing Game-Root Files (`shared/`)
 

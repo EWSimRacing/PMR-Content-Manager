@@ -41,7 +41,8 @@ public sealed class BackupService : IBackupService
                     backupDir,
                     BackupPrefix(target.TargetRoot),
                     relative.Replace('/', Path.DirectorySeparatorChar));
-                _fs.CopyFile(source, backup, overwrite: true);
+                if (!_fs.FileExists(backup))
+                    _fs.CopyFile(source, backup, overwrite: false);
             }
         }, ct).ConfigureAwait(false);
     }
@@ -64,7 +65,7 @@ public sealed class BackupService : IBackupService
                 string relativeFromBackup = Path.GetRelativePath(backupDir, backupFile);
                 var (root, relative) = SplitBackupRelative(relativeFromBackup);
                 string dest = Path.Combine(GetBaseRoot(dataRoot, gameRoot, root), relative);
-                _fs.CopyFile(backupFile, dest, overwrite: true);
+                _fs.CopyFile(backupFile, dest, overwrite: true, restoreSourceAttributes: true);
             }
         }, ct).ConfigureAwait(false);
     }

@@ -49,4 +49,15 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
   </ItemGroup>
 
+  <!-- A non-reference executable project copies its apphost/sidecars, but not its managed DLL. -->
+  <Target Name="CopyHelperRuntimeAssembly" AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="..\EWSR_PMR_ModApp.Helper\EWSR_PMR_ModApp.Helper.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+      <Output TaskParameter="TargetOutputs" ItemName="_HelperRuntimeAssembly" />
+    </MSBuild>
+    <Copy SourceFiles="@(_HelperRuntimeAssembly)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

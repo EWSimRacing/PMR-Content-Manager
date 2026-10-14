@@ -79,12 +79,11 @@ public partial class App : Application
 
         // ── Elevated writer factory ──────────────────────────────────────────
         // Resolved at operation time so DataRoot changes (e.g. via Settings) are reflected.
-        services.AddSingleton<Func<string, IElevatedWriter>>(sp =>
+        services.AddSingleton<Func<WritePlanRequest, IElevatedWriter>>(sp =>
         {
-            var locator = sp.GetRequiredService<IGameLocator>();
-            return dataRoot => locator.CanWriteDataRoot(dataRoot)
-                ? (IElevatedWriter) new InProcessWriter()
-                : new HelperProcessWriter();
+            return request => WriteAccessPolicy.RequiresElevation(request)
+                ? (IElevatedWriter) new HelperProcessWriter()
+                : new InProcessWriter();
         });
 
         // ── UI layer ─────────────────────────────────────────────────────────
@@ -97,4 +96,3 @@ public partial class App : Application
             sp.GetRequiredService<MainViewModel>()));
     }
 }
-

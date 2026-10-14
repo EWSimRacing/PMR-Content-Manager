@@ -7,11 +7,14 @@ public sealed class WriteResult
 {
     /// <summary><c>true</c> when all operations completed without error.</summary>
     public bool Success { get; init; }
+    public bool RollbackAttempted { get; init; }
+    public bool RollbackSucceeded { get; init; }
+    public string? RecoveryDirectory { get; init; }
 
     /// <summary>Top-level error message, populated when <see cref="Success"/> is <c>false</c>.</summary>
     public string? ErrorMessage { get; init; }
 
-    /// <summary>Number of files successfully copied into the data root.</summary>
+    /// <summary>Number of copied files; zero after a fully successful rollback.</summary>
     public int FilesCopied { get; init; }
 
     /// <summary>Number of files deleted from the data root.</summary>

@@ -7,7 +7,8 @@
 # WARNING: Do NOT add PublishTrimmed=true. WPF uses reflection; trimming breaks bindings.
 
 param(
-    [bool]$DryRun = $true
+    [bool]$DryRun = $true,
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot "dist")
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +16,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot       = $PSScriptRoot
 $UIProject      = Join-Path $RepoRoot "src\EWSR_PMR_ModApp.UI\EWSR_PMR_ModApp.UI.csproj"
 $HelperProject  = Join-Path $RepoRoot "src\EWSR_PMR_ModApp.Helper\EWSR_PMR_ModApp.Helper.csproj"
-$DistDir        = Join-Path $RepoRoot "dist"
+$DistDir        = [IO.Path]::GetFullPath($OutputDirectory)
 
 # UI publish args (WPF -- no trimming)
 $UIArgs = @(
@@ -60,10 +61,9 @@ if ($DryRun) {
     exit 0
 }
 
-# Clean the dist directory before publishing.
-if (Test-Path $DistDir) {
-    Write-Host "Cleaning existing dist\ ..." -ForegroundColor Gray
-    Remove-Item -Recurse -Force $DistDir
+# Do not overwrite or delete a previous package.
+if ((Test-Path -LiteralPath $DistDir) -and (Get-ChildItem -LiteralPath $DistDir -Force)) {
+    throw "Output directory is not empty: $DistDir. Choose a fresh -OutputDirectory."
 }
 
 Write-Host "Publishing PMR CM.exe ..." -ForegroundColor Green

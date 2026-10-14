@@ -2,8 +2,8 @@ namespace EWSR_PMR_ModApp.Core.Elevation;
 
 /// <summary>
 /// <see cref="IElevatedWriter"/> implementation that executes file operations directly in the
-/// calling process.  Used when <c>IGameLocator.CanWriteDataRoot</c> returns <c>true</c>
-/// (game directory is writable without elevation).
+/// calling process. Used when request-aware <see cref="WriteAccessPolicy"/> permits
+/// direct writes; a writable directory alone does not prove overwrite permission.
 /// </summary>
 /// <remarks>
 /// Validates every path via <see cref="PathValidator"/> before forwarding to

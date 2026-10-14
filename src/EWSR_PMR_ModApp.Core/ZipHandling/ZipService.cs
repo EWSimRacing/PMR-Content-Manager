@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using EWSR_PMR_ModApp.Core.Abstractions;
 using EWSR_PMR_ModApp.Core.Common;
+using EWSR_PMR_ModApp.Core.Elevation;
 
 namespace EWSR_PMR_ModApp.Core.ZipHandling;
 
@@ -43,64 +44,88 @@ public sealed class ZipService : IZipService
     {
         string sessionId  = Guid.NewGuid().ToString("N");
         string stagingDir = AppPaths.StagingDirForSession(sessionId);
-        _fs.CreateDirectory(stagingDir);
-
         string  zipHash  = HashHelper.ComputeFileHash(zipPath);
+        _fs.CreateDirectory(stagingDir);
         var     entries  = new List<ZipEntryInfo>();
         ModInfo? modInfo = null;
 
-        await Task.Run(() =>
+        try
         {
-            using var archive = ZipFile.OpenRead(zipPath);
-            int total = archive.Entries.Count;
-            int done  = 0;
-
-            foreach (var entry in archive.Entries)
+            await Task.Run(() =>
             {
-                ct.ThrowIfCancellationRequested();
-
-                // Skip directory markers.
-                if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))
+                using var archive = ZipFile.OpenRead(zipPath);
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in archive.Entries)
                 {
-                    done++;
-                    continue;
+                    string name = entry.FullName.Replace('\\', '/');
+                    bool directory = name.EndsWith('/');
+                    if (!PathValidator.IsSafeRelativePath(directory ? name.TrimEnd('/') : name)
+                        || (!directory && !names.Add(name)))
+                        throw new InvalidDataException($"Unsafe or duplicate archive path rejected: {entry.FullName}");
                 }
+                int total = archive.Entries.Count;
+                int done  = 0;
 
-                string relativeName = entry.FullName.Replace('\\', '/');
-                string destPath = Path.Combine(
-                    stagingDir,
-                    relativeName.Replace('/', Path.DirectorySeparatorChar));
-
-                _fs.CreateDirectory(Path.GetDirectoryName(destPath)!);
-
-                using (var src  = entry.Open())
-                using (var dest = _fs.CreateFile(destPath))
-                    src.CopyTo(dest);
-
-                entries.Add(new ZipEntryInfo
+                foreach (var entry in archive.Entries)
                 {
-                    FullNameInZip    = relativeName,
-                    StagedFilePath   = destPath,
-                    UncompressedSize = entry.Length
-                });
+                    ct.ThrowIfCancellationRequested();
 
-                // Parse modinfo.json if it lives at the zip root (no sub-directory).
-                if (string.Equals(entry.Name, "modinfo.json", StringComparison.OrdinalIgnoreCase)
-                    && !relativeName.TrimStart('/').Contains('/'))
-                {
-                    try
+                    // Skip directory markers.
+                    if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))
                     {
-                        string json = File.ReadAllText(destPath);
-                        modInfo = JsonSerializer.Deserialize<ModInfo>(json,
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        done++;
+                        continue;
                     }
-                    catch { /* Malformed modinfo — ignore and fall back to heuristics. */ }
-                }
 
-                done++;
-                progress?.Report((int)((double)done / total * 100));
-            }
-        }, ct).ConfigureAwait(false);
+                    string relativeName = entry.FullName.Replace('\\', '/');
+                    string destPath = Path.Combine(
+                        stagingDir,
+                        relativeName.Replace('/', Path.DirectorySeparatorChar));
+
+                    _fs.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+                    using (var src  = entry.Open())
+                    using (var dest = _fs.CreateFile(destPath))
+                        src.CopyTo(dest);
+
+                    entries.Add(new ZipEntryInfo
+                    {
+                        FullNameInZip    = relativeName,
+                        StagedFilePath   = destPath,
+                        UncompressedSize = entry.Length
+                    });
+
+                    // Parse modinfo.json if it lives at the zip root (no sub-directory).
+                    if (string.Equals(entry.Name, "modinfo.json", StringComparison.OrdinalIgnoreCase)
+                        && !relativeName.TrimStart('/').Contains('/'))
+                    {
+                        try
+                        {
+                            string json = _fs.ReadAllText(destPath);
+                            modInfo = JsonSerializer.Deserialize<ModInfo>(json,
+                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (modInfo is null || modInfo.Files is null || modInfo.GameRootFiles is null
+                                || modInfo.DisplayFiles is null || modInfo.SkipFiles is null
+                                || modInfo.SchemaVersion is < 1 or > 2
+                                || modInfo.Files.Any(p => string.IsNullOrWhiteSpace(p.Key) || string.IsNullOrWhiteSpace(p.Value))
+                                || modInfo.GameRootFiles.Any(p => string.IsNullOrWhiteSpace(p.Key) || string.IsNullOrWhiteSpace(p.Value))
+                                || modInfo.DisplayFiles.Any(p => p.Value is null)
+                                || modInfo.SkipFiles.Any(p => p is null))
+                                throw new InvalidDataException("Invalid modinfo.json schema, collection, or mapping value.");
+                        }
+                        catch (JsonException ex) { throw new InvalidDataException("Malformed modinfo.json — correct the manifest before installing.", ex); }
+                    }
+
+                    done++;
+                    progress?.Report((int)((double)done / total * 100));
+                }
+            }, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            CleanupStaging(stagingDir);
+            throw;
+        }
 
         // Classify each entry using FileClassifier.
         var installEntries    = new List<ZipEntryInfo>();

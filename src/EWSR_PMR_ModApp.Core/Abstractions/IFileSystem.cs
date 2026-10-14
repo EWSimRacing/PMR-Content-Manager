@@ -11,10 +11,13 @@ public interface IFileSystem
 
     /// <summary>
     /// Copies a file, creating the destination directory if it doesn't exist.
+    /// Overwrites preserve destination attributes unless restoreSourceAttributes requests backup metadata.
     /// NOTE: Writing to C:\Program Files requires admin elevation at runtime —
     /// callers must ensure sufficient permissions before copying to game-data paths.
     /// </summary>
-    void CopyFile(string sourcePath, string destinationPath, bool overwrite);
+    void CopyFile(string sourcePath, string destinationPath, bool overwrite, bool restoreSourceAttributes = false);
+    FileAttributes GetFileAttributes(string path);
+    void SetFileAttributes(string path, FileAttributes attributes);
 
     void DeleteFile(string path);
     void DeleteDirectory(string path, bool recursive);

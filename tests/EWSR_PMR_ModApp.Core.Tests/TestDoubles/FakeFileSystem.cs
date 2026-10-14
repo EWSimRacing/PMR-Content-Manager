@@ -11,6 +11,8 @@ public sealed class FakeFileSystem : IFileSystem
     // file path → text content
     private readonly Dictionary<string, string> _textFiles =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, byte[]> _binaryFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, FileAttributes> _attributes = new(StringComparer.OrdinalIgnoreCase);
 
     // known directories (created explicitly or auto-inferred when a file is added)
     private readonly HashSet<string> _directories =
@@ -34,7 +36,16 @@ public sealed class FakeFileSystem : IFileSystem
     public FakeFileSystem AddFile(string path, string content = "")
     {
         _textFiles[Norm(path)] = content;
+        _binaryFiles.Remove(Norm(path));
+        _attributes.Remove(Norm(path));
         AddDirectory(Path.GetDirectoryName(Norm(path)) ?? Norm(path));
+        return this;
+    }
+
+    public FakeFileSystem AddBytes(string path, byte[] content)
+    {
+        AddFile(path);
+        _binaryFiles[Norm(path)] = content.ToArray();
         return this;
     }
 
@@ -45,27 +56,50 @@ public sealed class FakeFileSystem : IFileSystem
 
     public void CreateDirectory(string path) => AddDirectory(path);
 
-    public void CopyFile(string src, string dst, bool overwrite)
+    public void CopyFile(string src, string dst, bool overwrite, bool restoreSourceAttributes = false)
     {
+        var attributes = FileExists(dst) && !restoreSourceAttributes ? GetFileAttributes(dst) : GetFileAttributes(src);
         string content = _textFiles.TryGetValue(Norm(src), out var c) ? c : string.Empty;
         _textFiles[Norm(dst)] = content;
+        _binaryFiles.Remove(Norm(dst));
+        if (_binaryFiles.TryGetValue(Norm(src), out var bytes))
+            _binaryFiles[Norm(dst)] = bytes.ToArray();
         AddDirectory(Path.GetDirectoryName(Norm(dst)) ?? Norm(dst));
+        SetFileAttributes(dst, attributes);
     }
+    public FileAttributes GetFileAttributes(string path) => _attributes.GetValueOrDefault(Norm(path), FileAttributes.Archive);
+    public void SetFileAttributes(string path, FileAttributes attributes) => _attributes[Norm(path)] = attributes;
 
-    public void DeleteFile(string path) => _textFiles.Remove(Norm(path));
+    public void DeleteFile(string path)
+    {
+        _textFiles.Remove(Norm(path));
+        _binaryFiles.Remove(Norm(path));
+        _attributes.Remove(Norm(path));
+    }
 
     public void DeleteDirectory(string path, bool recursive)
     {
         string np = Norm(path);
         _directories.RemoveWhere(d => d.StartsWith(np, StringComparison.OrdinalIgnoreCase));
         if (recursive)
+        {
             foreach (var k in _textFiles.Keys
                 .Where(k => k.StartsWith(np, StringComparison.OrdinalIgnoreCase)).ToList())
                 _textFiles.Remove(k);
+            foreach (var k in _binaryFiles.Keys.Where(k => k.StartsWith(np, StringComparison.OrdinalIgnoreCase)).ToList())
+                _binaryFiles.Remove(k);
+            foreach (var k in _attributes.Keys.Where(k => k.StartsWith(np, StringComparison.OrdinalIgnoreCase)).ToList())
+                _attributes.Remove(k);
+        }
     }
 
     public string ReadAllText(string path)
     {
+        if (_binaryFiles.TryGetValue(Norm(path), out var bytes))
+        {
+            using var reader = new StreamReader(new MemoryStream(bytes));
+            return reader.ReadToEnd();
+        }
         if (_textFiles.TryGetValue(Norm(path), out var c)) return c;
         throw new FileNotFoundException($"FakeFileSystem: '{path}' not found.");
     }
@@ -73,6 +107,7 @@ public sealed class FakeFileSystem : IFileSystem
     public void WriteAllText(string path, string contents)
     {
         _textFiles[Norm(path)] = contents;
+        _binaryFiles.Remove(Norm(path));
         AddDirectory(Path.GetDirectoryName(Norm(path)) ?? Norm(path));
     }
 
@@ -97,6 +132,7 @@ public sealed class FakeFileSystem : IFileSystem
 
     public Stream OpenRead(string path)
     {
+        if (_binaryFiles.TryGetValue(Norm(path), out var bytes)) return new MemoryStream(bytes, writable: false);
         string text = ReadAllText(path);
         return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
     }
@@ -106,6 +142,7 @@ public sealed class FakeFileSystem : IFileSystem
         var ms = new TrackingMemoryStream(content =>
         {
             _textFiles[Norm(path)] = System.Text.Encoding.UTF8.GetString(content);
+            _binaryFiles[Norm(path)] = content.ToArray();
         });
         return ms;
     }

@@ -8,6 +8,7 @@ namespace EWSR_PMR_ModApp.Core.SyncEngine;
 /// </summary>
 public sealed class ReapplyPlan
 {
+    public IReadOnlyList<string> Warnings { get; init; } = [];
     /// <summary>Absolute path to the game data root.</summary>
     public required string DataRoot { get; init; }
 
